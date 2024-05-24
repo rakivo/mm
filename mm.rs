@@ -23,7 +23,6 @@ pub enum Inst {
     DIV,
     CMP,
     DUP(usize),
-
     JE(usize),
     JL(usize),
     JNGE(usize),
@@ -31,7 +30,6 @@ pub enum Inst {
     JNLE(usize),
     JZ(usize),
     JMP(usize),
-
     HALT
 }
 
@@ -56,7 +54,7 @@ macro_rules! inst_from_bytes {
 
 #[allow(unused)]
 impl Inst {
-    fn to_bytes(&self) -> Vec<u8> {
+    fn to_bytes(&self) -> Vec::<u8> {
         match self {
             Inst::NOP        => vec![0],
             Inst::PUSH(val)  => extend_from_byte!(1, *val),
@@ -78,7 +76,7 @@ impl Inst {
         }
     }
 
-    fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), Trap> {
+    fn from_bytes(bytes: &[u8]) -> Result<(Inst, usize), Trap> {
         match bytes.get(0) {
             Some(0)  => Ok((Inst::NOP, 1)),
             Some(1)  => inst_from_bytes!(bytes, PUSH, Word),
@@ -102,39 +100,39 @@ impl Inst {
     }
 }
 
+macro_rules! ok_inst {
+    ($inst: tt) => { Ok(Inst::$inst) };
+    ($inst: tt, $oper: expr, $ty: ty) => { Ok(Inst::$inst($oper as $ty)) }
+}
+
 impl std::convert::TryFrom<&str> for Inst {
     type Error = Trap;
 
     fn try_from(s: &str) -> Result<Inst, Self::Error> {
         let mut splitted = s.split_whitespace();
         let inst = splitted.next().ok_or(Trap::IllegalInstruction)?;
+        let oper = if let Some(oper) = splitted.next() {
+            Some(oper.parse::<Word>().map_err(|_| Trap::InvalidOperand)?)
+        } else { None };
         match inst {
-            "nop"  => Ok(Inst::NOP),
-            "pop"  => Ok(Inst::POP),
-            "add"  => Ok(Inst::ADD),
-            "sub"  => Ok(Inst::SUB),
-            "mul"  => Ok(Inst::MUL),
-            "div"  => Ok(Inst::DIV),
-            "cmp"  => Ok(Inst::CMP),
-            "halt" => Ok(Inst::HALT),
-            _ => {
-                let oper = splitted.next()
-                    .expect("Expected operand after instruction")
-                    .parse::<Word>()
-                    .map_err(|_| Trap::InvalidOperand)?;
-                match inst {
-                    "push" => Ok(Inst::PUSH(oper)),
-                    "dup"  => Ok(Inst::DUP(oper as usize)),
-                    "je"   => Ok(Inst::JE(oper as usize)),
-                    "jl"   => Ok(Inst::JL(oper as usize)),
-                    "jnge" => Ok(Inst::JNGE(oper as usize)),
-                    "jg"   => Ok(Inst::JG(oper as usize)),
-                    "jnle" => Ok(Inst::JNLE(oper as usize)),
-                    "jz"   => Ok(Inst::JZ(oper as usize)),
-                    "jmp"  => Ok(Inst::JMP(oper as usize)),
-                    _      => Err(Trap::IllegalInstruction)
-                }
-            }
+            "nop"  => ok_inst!(NOP),
+            "pop"  => ok_inst!(POP),
+            "add"  => ok_inst!(ADD),
+            "sub"  => ok_inst!(SUB),
+            "mul"  => ok_inst!(MUL),
+            "div"  => ok_inst!(DIV),
+            "cmp"  => ok_inst!(CMP),
+            "halt" => ok_inst!(HALT),
+            "push" => ok_inst!(PUSH, oper.ok_or(Trap::InvalidOperand)?, Word),
+            "dup"  => ok_inst!(DUP,  oper.ok_or(Trap::InvalidOperand)?, usize),
+            "je"   => ok_inst!(JE,   oper.ok_or(Trap::InvalidOperand)?, usize),
+            "jl"   => ok_inst!(JL,   oper.ok_or(Trap::InvalidOperand)?, usize),
+            "jnge" => ok_inst!(JNGE, oper.ok_or(Trap::InvalidOperand)?, usize),
+            "jg"   => ok_inst!(JG,   oper.ok_or(Trap::InvalidOperand)?, usize),
+            "jnle" => ok_inst!(JNLE, oper.ok_or(Trap::InvalidOperand)?, usize),
+            "jz"   => ok_inst!(JZ,   oper.ok_or(Trap::InvalidOperand)?, usize),
+            "jmp"  => ok_inst!(JMP,  oper.ok_or(Trap::InvalidOperand)?, usize),
+            _      => Err(Trap::IllegalInstruction)
         }
     }
 }
@@ -167,8 +165,7 @@ impl std::fmt::Display for Mm<'_> {
         write!(f, "stack: ")?;
         if let Some(first) = self.stack.first() {
             write!(f, "{first}, ")?;
-            let mut i = 0;
-            let n = self.stack.len();
+            let (mut i, n) = (1, self.stack.len());
             while i < n {
                 write!(f, "{oper}", oper = self.stack[i])?;
                 if i < n - 1 { write!(f, ", ")?; }
@@ -311,8 +308,7 @@ impl<'a> Mm<'a> {
 
     #[allow(unused)]
     pub fn save_program_to_file(program: &Vec::<Inst>, file_path: &str) -> std::io::Result::<()> {
-        use std::fs::File;
-        use std::io::Write;
+        use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
         for inst in program {
@@ -323,17 +319,12 @@ impl<'a> Mm<'a> {
 
     #[allow(unused)]
     pub fn load_program_from_file(file_path: &str) -> std::io::Result<Vec::<Inst>> {
-        use std::fs::File;
-        use std::io::{Read, *};
+        use std::{fs::read, io::{Read, *}};
 
-        let mut f = File::open(file_path)?;
-        let mut buffer = Vec::new();
-        f.read_to_end(&mut buffer)?;
-
-        let mut i = 0;
-        let mut program = Vec::new();
-        while i < buffer.len() {
-            match Inst::from_bytes(&buffer[i..]) {
+        let buf = read(file_path)?;
+        let (mut i, mut program) = (0, Vec::new());
+        while i < buf.len() {
+            match Inst::from_bytes(&buf[i..]) {
                 Ok((inst, size)) => {
                     program.push(inst);
                     i += size;
@@ -341,25 +332,18 @@ impl<'a> Mm<'a> {
                 Err(e) => return Err(Error::new(ErrorKind::InvalidData, format!("{:?}", e)))
             }
         }
-
         Ok(program)
     }
 
     pub fn translate_masm(file_path: &str) -> std::io::Result<Vec::<Inst>> {
-        use std::fs::File;
-        use std::io::Read;
-        use std::convert::TryFrom;
+        use std::{fs::read_to_string, convert::TryFrom};
 
-        let mut f = File::open(file_path)?;
-        let mut buf = String::new();
-        f.read_to_string(&mut buf)?;
-
-        let mut ret = Vec::new();
-        for line in buf.lines() {
-            if line.starts_with(";") || line.is_empty() { continue }
-            let inst = Inst::try_from(line).unwrap();
-            ret.push(inst);
-        }
+        let ret = read_to_string(file_path)?
+            .lines()
+            .filter(|l| !l.starts_with(";") || !l.is_empty())
+            .map(Inst::try_from)
+            .filter_map(Result::ok)
+            .collect::<Vec::<Inst>>();
 
         Ok(ret)
     }
