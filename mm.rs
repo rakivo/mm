@@ -12,7 +12,6 @@ pub enum Trap {
 enum Flag {JE, JL, JNGE, JG, JNLE, JZ}
 
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum Inst {
     NOP,
     PUSH(Word),
@@ -52,7 +51,6 @@ macro_rules! inst_from_bytes {
     }
 }
 
-#[allow(unused)]
 impl Inst {
     fn to_bytes(&self) -> Vec::<u8> {
         match self {
@@ -301,7 +299,6 @@ impl<'a> Mm<'a> {
         }
     }
 
-    #[allow(unused)]
     pub fn save_program_to_file(program: &Vec::<Inst>, file_path: &str) -> std::io::Result::<()> {
         use std::{fs::File, io::Write};
 
@@ -312,9 +309,8 @@ impl<'a> Mm<'a> {
         Ok(())
     }
 
-    #[allow(unused)]
     pub fn load_program_from_file(file_path: &str) -> std::io::Result<Vec::<Inst>> {
-        use std::{fs::read, io::{Read, *}};
+        use std::{fs::read, io::*};
 
         let buf = read(file_path)?;
         let (mut i, mut program) = (0, Vec::new());
