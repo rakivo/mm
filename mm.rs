@@ -1,6 +1,3 @@
-#[derive(Debug, PartialEq)]
-enum Flag {JE, JL, JNGE, JG, JNLE, JZ}
-
 #[derive(Debug)]
 pub enum Trap {
     StackOverflow,
@@ -10,6 +7,9 @@ pub enum Trap {
     IllegalInstruction,
     IllegalInstructionAccess
 }
+
+#[derive(Debug, PartialEq)]
+enum Flag {JE, JL, JNGE, JG, JNLE, JZ}
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -100,11 +100,6 @@ impl Inst {
     }
 }
 
-macro_rules! ok_inst {
-    ($inst: tt) => { Ok(Inst::$inst) };
-    ($inst: tt, $oper: expr, $ty: ty) => { Ok(Inst::$inst($oper as $ty)) }
-}
-
 impl std::convert::TryFrom<&str> for Inst {
     type Error = Trap;
 
@@ -115,23 +110,23 @@ impl std::convert::TryFrom<&str> for Inst {
             Some(oper.parse::<Word>().map_err(|_| Trap::InvalidOperand)?)
         } else { None };
         match inst {
-            "nop"  => ok_inst!(NOP),
-            "pop"  => ok_inst!(POP),
-            "add"  => ok_inst!(ADD),
-            "sub"  => ok_inst!(SUB),
-            "mul"  => ok_inst!(MUL),
-            "div"  => ok_inst!(DIV),
-            "cmp"  => ok_inst!(CMP),
-            "halt" => ok_inst!(HALT),
-            "push" => ok_inst!(PUSH, oper.ok_or(Trap::InvalidOperand)?, Word),
-            "dup"  => ok_inst!(DUP,  oper.ok_or(Trap::InvalidOperand)?, usize),
-            "je"   => ok_inst!(JE,   oper.ok_or(Trap::InvalidOperand)?, usize),
-            "jl"   => ok_inst!(JL,   oper.ok_or(Trap::InvalidOperand)?, usize),
-            "jnge" => ok_inst!(JNGE, oper.ok_or(Trap::InvalidOperand)?, usize),
-            "jg"   => ok_inst!(JG,   oper.ok_or(Trap::InvalidOperand)?, usize),
-            "jnle" => ok_inst!(JNLE, oper.ok_or(Trap::InvalidOperand)?, usize),
-            "jz"   => ok_inst!(JZ,   oper.ok_or(Trap::InvalidOperand)?, usize),
-            "jmp"  => ok_inst!(JMP,  oper.ok_or(Trap::InvalidOperand)?, usize),
+            "nop"  => Ok(Inst::NOP),
+            "pop"  => Ok(Inst::POP),
+            "add"  => Ok(Inst::ADD),
+            "sub"  => Ok(Inst::SUB),
+            "mul"  => Ok(Inst::MUL),
+            "div"  => Ok(Inst::DIV),
+            "cmp"  => Ok(Inst::CMP),
+            "halt" => Ok(Inst::HALT),
+            "push" => Ok(Inst::PUSH(oper.ok_or(Trap::InvalidOperand)?)),
+            "dup"  => Ok(Inst::DUP(oper.ok_or(Trap::InvalidOperand)? as usize)),
+            "je"   => Ok(Inst::JE(oper.ok_or(Trap::InvalidOperand)? as usize)),
+            "jl"   => Ok(Inst::JL(oper.ok_or(Trap::InvalidOperand)? as usize)),
+            "jnge" => Ok(Inst::JNGE(oper.ok_or(Trap::InvalidOperand)? as usize)),
+            "jg"   => Ok(Inst::JG(oper.ok_or(Trap::InvalidOperand)? as usize)),
+            "jnle" => Ok(Inst::JNLE(oper.ok_or(Trap::InvalidOperand)? as usize)),
+            "jz"   => Ok(Inst::JZ(oper.ok_or(Trap::InvalidOperand)? as usize)),
+            "jmp"  => Ok(Inst::JMP(oper.ok_or(Trap::InvalidOperand)? as usize)),
             _      => Err(Trap::IllegalInstruction)
         }
     }
