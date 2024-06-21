@@ -2,3 +2,4 @@ build
 target
 Cargo.toml
 Cargo.lock
+generated.masm

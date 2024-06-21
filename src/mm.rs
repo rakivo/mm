@@ -4,9 +4,9 @@ mod inst;
 mod flag;
 mod trap;
 
-use inst::*;
-use flag::*;
-use trap::*;
+pub use inst::*;
+pub use flag::*;
+pub use trap::*;
 
 pub type Word = u64;
 pub type MResult<T> = result::Result::<T, Trap>;
@@ -60,6 +60,7 @@ impl<'a> Mm<'a> {
         }
     }
 
+    #[inline(always)]
     pub fn halt(&self) -> &bool {
         &self.halt
     }
@@ -96,22 +97,22 @@ impl<'a> Mm<'a> {
                 self.stack.push(b);
                 self.stack.push(a);
             }
-            _ => return Err(Trap::IllegalInstruction)
+            _ => unreachable!()
         };
 
         self.ip += 1;
         Ok(())
     }
 
-    fn jump_if_flag(&mut self, oper: &usize, flag: Flag) -> Result<(), Trap> {
+    fn jump_if_flag(&mut self, oper: &Word, flag: Flag) -> Result<(), Trap> {
         let program_len = self.program.len();
-        if *oper >= program_len {
+        if *oper as usize >= program_len {
             eprintln!("ERROR: operand {oper} is outside of program bounds, program len: {program_len}");
-            return Err(Trap::InvalidOperand);
+            return Err(Trap::InvalidOperand(Some(oper.to_string())));
         }
 
         if self.flags.is(flag) {
-            self.ip = *oper;
+            self.ip = *oper as usize;
         } else {
             self.ip += 1;
         }
@@ -147,25 +148,25 @@ impl<'a> Mm<'a> {
             CMP  => self.two_opers_inst(CMP, false),
             SWAP => self.two_opers_inst(SWAP, true),
 
-            DUP(oper) => if self.stack.len() > *oper {
+            DUP(oper) => if self.stack.len() > *oper as usize {
                 if self.stack.len() < Mm::STACK_CAP {
-                    let val = self.stack[self.stack.len() - 1 - oper];
+                    let val = self.stack[self.stack.len() - 1 - *oper as usize];
                     self.stack.push(val);
                     self.ip += 1;
                     Ok(())
                 } else { Err(Trap::StackOverflow) }
             } else { Err(Trap::StackUnderflow) }
 
-            Inst::JE(oper)   => self.jump_if_flag(oper, Flag::E),
-            Inst::JL(oper)   => self.jump_if_flag(oper, Flag::L),
-            Inst::JNGE(oper) => self.jump_if_flag(oper, Flag::NGE),
-            Inst::JG(oper)   => self.jump_if_flag(oper, Flag::G),
-            Inst::JNLE(oper) => self.jump_if_flag(oper, Flag::NLE),
-            Inst::JZ(oper)   => self.jump_if_flag(oper, Flag::Z),
-            Inst::JNZ(oper)  => self.jump_if_flag(oper, Flag::NZ),
+            JE(oper)   => self.jump_if_flag(oper, Flag::E),
+            JL(oper)   => self.jump_if_flag(oper, Flag::L),
+            JNGE(oper) => self.jump_if_flag(oper, Flag::NGE),
+            JG(oper)   => self.jump_if_flag(oper, Flag::G),
+            JNLE(oper) => self.jump_if_flag(oper, Flag::NLE),
+            JZ(oper)   => self.jump_if_flag(oper, Flag::Z),
+            JNZ(oper)  => self.jump_if_flag(oper, Flag::NZ),
 
-            JMP(oper) => if *oper < self.program.len() {
-                self.ip = *oper;
+            JMP(oper) => if (*oper as usize) < self.program.len() {
+                self.ip = *oper as usize;
                 Ok(())
             } else {
                 eprintln!("ERROR: operand {oper} is outside of program bounds, program len: {len}", len = self.program.len());
@@ -179,12 +180,12 @@ impl<'a> Mm<'a> {
         }
     }
 
-    pub fn save_program_to_file(program: &Vec::<Inst>, file_path: &str) -> std::io::Result::<()> {
+    pub fn save_program_to_file(program: &[Inst], file_path: &str) -> std::io::Result::<()> {
         use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
         for inst in program {
-            f.write_all(&inst.to_bytes())?;
+            f.write_all(&inst.as_bytes())?;
         }
 
         Ok(())
@@ -216,7 +217,7 @@ impl<'a> Mm<'a> {
             err
         }).unwrap()
           .lines()
-          .filter(|l| !l.starts_with(";") || !l.is_empty())
+          .filter(|l| !l.starts_with(";") && !l.trim().is_empty())
           .map(Inst::try_from)
           .collect::<Vec::<_>>();
 
@@ -226,6 +227,18 @@ impl<'a> Mm<'a> {
         }
 
         Ok(ret)
+    }
+
+    pub fn generate_masm(program: &[Inst], file_path: &str) -> std::io::Result<()> {
+        use std::{fs::File, io::Write};
+
+        let mut f = File::create(file_path)?;
+        for inst in program {
+            let inst_str = format!("{inst}\n", inst = String::from(inst));
+            f.write_all(&inst_str.as_bytes())?;
+        }
+
+        Ok(())
     }
 }
 
