@@ -1,9 +1,8 @@
 #ifndef _TRAP_HPP
 #define _TRAP_HPP
 
-#include <cassert>
 #include <iostream>
-#include <type_traits>
+#include <concepts>
 
 #include "inst.hpp"
 
@@ -14,12 +13,6 @@ enum class trap_t
     STACK_UNDERFLOW,
     ILLEGAL_INSTRUCTION_ACCESS
 };
-
-TO_STRING(trap_t,
-    MATCH(OK, return);
-    MATCH(STACK_OVERFLOW, return);
-    MATCH(STACK_UNDERFLOW, return)
-    MATCH(ILLEGAL_INSTRUCTION_ACCESS, return));
 
 class Trap
 {
@@ -48,15 +41,10 @@ public:
 
     template <class T>
     requires requires (Trap* t) { *(T*)t; }
-    constexpr operator T() const noexcept {
+    constexpr operator T() const noexcept
+    {
         return *(T*)this;
     }
 };
-
-STREAM(trap_t,
-    MATCH(OK, os <<);
-    MATCH(STACK_OVERFLOW, os <<);
-    MATCH(STACK_UNDERFLOW, os <<);
-    MATCH(ILLEGAL_INSTRUCTION_ACCESS, os <<));
 
 #endif // _TRAP_HPP

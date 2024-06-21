@@ -4,6 +4,5 @@
 int main(void)
 {
     Mm mm = "output.bin";
-    const auto trap = mm.run();
-    return trap;
+    return mm.run();
 }

@@ -1,10 +1,11 @@
 CC = clang++
+CFLAGS = -Wall -Wextra -Werror -Wshadow -Wpedantic -Wswitch-enum -std=c++26
+
 SRC = src
 BUILD = build
 EXAMPLES = examples
-CFLAGS = -Wall -Wextra -Werror -Wshadow -Wpedantic -Wswitch-enum -std=c++26
 
-all: mm
+all: mm examples
 
 examples: $(BUILD) $(BUILD)/save_program $(BUILD)/load_program
 

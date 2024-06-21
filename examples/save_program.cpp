@@ -2,17 +2,19 @@
 #include "../src/mm.hpp"
 
 using enum inst_t;
+using enum instwop_t;
 
 const static auto program = {
-    Inst(PUSH, 68),
-    Inst(INC),
-    Inst(PUSH, 419),
-    Inst(INC),
-    Inst(POP),
-    Inst(POP)
+    Inst(34),
+    Inst(35),
+    Inst(ADD),
+    Inst(1000),
+    Inst(580),
+    Inst(SUB),
+    Inst(ADD)
 };
 
-int main(const int argc, const char* const argv[])
+int main(const int argc, const char *const argv[])
 {
     if (argc != 2) {
         std::cerr << "USAGE: " << argv[0] << " <output_file_path>" << std::endl;
