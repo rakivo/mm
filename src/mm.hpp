@@ -56,11 +56,15 @@ public:
     int save_program(const char *file_path) const noexcept;
     static std::vector<Inst> load_program(const char *file_path) noexcept;
 
-    const Trap execute_instruction(const Inst& inst) noexcept;
-    const Trap handle_non_operand_instruction(const inst_t type) noexcept;
-    const Trap handle_single_operand_instruction(const instwop_t type, const Inst::operand_t& oper) noexcept;
-
 private:
+    const Trap execute_instruction(const Inst& inst) noexcept;
+
+    // Noi -> non-operand-instruction
+    const Trap handle_noi(const inst_t type) noexcept;
+
+    // Soi -> single-operand-instruction
+    const Trap handle_soi(const instwop_t type, const Inst::operand_t& oper) noexcept;
+
     const inline Trap make_trap(trap_t type) const noexcept
     {
         return Trap(type, program_m[ip_m]);
@@ -81,7 +85,7 @@ void Mm::dump(void) const noexcept
     std::cout << std::endl;
 }
 
-const Trap Mm::handle_non_operand_instruction(const inst_t type) noexcept
+const Trap Mm::handle_noi(const inst_t type) noexcept
 {
     using enum inst_t;
     using enum trap_t;
@@ -141,7 +145,7 @@ const Trap Mm::handle_non_operand_instruction(const inst_t type) noexcept
     return Trap(OK);
 }
 
-const Trap Mm::handle_single_operand_instruction(const instwop_t type, const Inst::operand_t& oper) noexcept
+const Trap Mm::handle_soi(const instwop_t type, const Inst::operand_t& oper) noexcept
 {
     using enum instwop_t;
     using enum trap_t;
@@ -173,9 +177,9 @@ const Trap Mm::execute_instruction(const Inst& inst) noexcept
     }
 
     if (auto type = std::get_if<inst_t>(&inst.type))
-        return handle_non_operand_instruction(*type);
+        return handle_noi(*type);
     else if (auto typewop = std::get_if<instwop_t>(&inst.type))
-        return handle_single_operand_instruction(*typewop, inst.operand);
+        return handle_soi(*typewop, inst.operand);
     else assert(0 && "UNREACHABLE");
 }
 
