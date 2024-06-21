@@ -1,27 +1,37 @@
-CC = clang++
-CFLAGS = -Wall -Wextra -Werror -Wshadow -Wpedantic -Wswitch-enum -std=c++26
+DEBUG_FLAGS = -g -C "opt-level=0"
+RELEASE_FLAGS = -C "opt-level=3"
+LIBFLAGS = --crate-type=rlib
+BIN_PREF = build/
+THREADS = -Z threads=10
 
-SRC = src
-BUILD = build
-EXAMPLES = examples
+all: test_examples
+mm: build/mm
+examples: build/load_from_binary build/translate_masm
 
-all: mm examples
+TRANSLATE = ./build/translate_masm
+LOAD = ./build/load_from_binary
+EXAMPLES = fib.masm swap.masm jumps.masm
+BINARIES = $(EXAMPLES:%.masm=./build/%)
 
-examples: $(BUILD) $(BUILD)/save_program $(BUILD)/load_program
+BUILD_DIR = ./build
+MASM_DIR = ./masm
+EXAMPLES = fib swap jumps
+BINARIES = $(EXAMPLES:%=$(BUILD_DIR)/%)
 
-$(BUILD)/save_program: $(EXAMPLES)/save_program.cpp
-	$(CC) $(CFLAGS) -o $@ $<
+test_examples: mm $(BINARIES)
+	$(foreach bin,$(BINARIES),$(LOAD) $(bin);)
 
-$(BUILD)/load_program: $(EXAMPLES)/load_program.cpp
-	$(CC) $(CFLAGS) -o $@ $<
+$(BUILD_DIR)/%: $(MASM_DIR)/%.masm
+	$(TRANSLATE) $< $@
 
-$(BUILD):
-	@mkdir -p $@
+$(BUILD_DIR)/mm: src/mm.rs src/flag.rs src/inst.rs src/trap.rs
+	cargo build --target-dir $(BUILD_DIR)
 
-mm: $(BUILD)/mm
+$(BUILD_DIR)/load_from_binary: mm examples/load_from_binary.rs
+	rustc $(RELEASE_FLAGS) $(THREADS) --extern mm=./$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/load_from_binary.rs
 
-$(BUILD)/mm: $(SRC)/main.cpp $(SRC)/mm.hpp $(SRC)/trap.hpp $(SRC)/inst.hpp $(SRC)/macros.hpp $(SRC)/types.hpp
-	$(CC) $(CFLAGS) -o $@ $<
+$(BUILD_DIR)/translate_masm: mm examples/translate_masm.rs
+	rustc $(RELEASE_FLAGS) $(THREADS) --extern mm=./$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/translate_masm.rs
 
 clean:
-	rm -rf build/*
+	rm -f $(BUILD_DIR)/*

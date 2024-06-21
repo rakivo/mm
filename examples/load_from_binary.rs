@@ -19,6 +19,7 @@ fn main() -> std::io::Result<()> {
     while i > 0 && !vm.halt() {
         vm.execute().unwrap();
         i -= 1;
+        println!("{vm}");
     }
-    Ok(println!("{vm}"))
+    Ok(())
 }
