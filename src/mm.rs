@@ -1,25 +1,27 @@
-use std::result;
+use std::collections::HashMap;
 
-mod inst;
-mod flag;
-mod trap;
+pub mod inst;
+pub mod flag;
+pub mod trap;
 
 pub use inst::*;
 pub use flag::*;
 pub use trap::*;
 
 pub type Word = u64;
-pub type MResult<T> = result::Result::<T, Trap>;
+pub type MResult<T> = std::result::Result::<T, Trap>;
 
-pub struct Mm<'a> {
+pub struct Mm {
     stack: Vec::<Word>,
+    labels: HashMap::<String, usize>,
     flags: Flags,
-    program: &'a [Inst],
+    program: Vec::<Inst>,
+
     ip: usize,
     halt: bool
 }
 
-impl std::fmt::Debug for Mm<'_> {
+impl std::fmt::Debug for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack size: {size}\n", size = self.stack.len())?;
         write!(f, "stack:")?;
@@ -32,7 +34,7 @@ impl std::fmt::Debug for Mm<'_> {
     }
 }
 
-impl std::fmt::Display for Mm<'_> {
+impl std::fmt::Display for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: ")?;
         if let Some(first) = self.stack.first() {
@@ -47,14 +49,27 @@ impl std::fmt::Display for Mm<'_> {
     }
 }
 
-impl<'a> Mm<'a> {
+impl Mm {
     const STACK_CAP: usize = 1024;
 
-    pub fn new(program: &'a [Inst]) -> Mm<'a> {
+    pub fn new_slice(program: &[Inst]) -> Mm {
         Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
+            labels: HashMap::new(),
+            flags: Flags::new(),
+            program: program.to_vec(),
+            ip: 0,
+            halt: false
+        }
+    }
+
+    pub fn new(program: Vec::<Inst>) -> Mm {
+        Mm {
+            stack: Vec::with_capacity(Mm::STACK_CAP),
+            labels: HashMap::new(),
             flags: Flags::new(),
             program,
+
             ip: 0,
             halt: false
         }
@@ -69,8 +84,8 @@ impl<'a> Mm<'a> {
         let stack_len = self.stack.len();
         if stack_len < 2 {
             eprintln!("ERROR: Not enough operands on the stack, needed: 2, have: {stack_len}");
-            eprintln!("Last executed instruction: {inst:?}", inst = self.program[self.ip]);
-            return Err(Trap::StackUnderflow)
+            eprintln!("Last executed instruction: {inst:?}");
+            return Err(Trap::StackUnderflow(inst))
         }
 
         use Inst::*;
@@ -86,10 +101,10 @@ impl<'a> Mm<'a> {
             MUL => *prelast *= last,
             DIV => if last != 0 {
                 *prelast /= last
-            } else { return Err(Trap::DivisionByZero) }
+            } else { return Err(Trap::DivisionByZero(inst)) }
             CMP => if stack_len < Mm::STACK_CAP {
                 self.flags.cmp(&*prelast, &last);
-            } else { return Err(Trap::StackOverflow) }
+            } else { return Err(Trap::StackOverflow(inst)) }
             SWAP => {
                 let a = *prelast;
                 let b = last;
@@ -104,19 +119,23 @@ impl<'a> Mm<'a> {
         Ok(())
     }
 
-    fn jump_if_flag(&mut self, oper: &Word, flag: Flag) -> Result<(), Trap> {
+    fn jump_if_flag(&mut self, label: String, flag: Flag) -> Result<(), Trap> {
         let program_len = self.program.len();
-        if *oper as usize >= program_len {
-            eprintln!("ERROR: operand {oper} is outside of program bounds, program len: {program_len}");
-            return Err(Trap::InvalidOperand(Some(oper.to_string())));
+        let Some(ip) = self.labels.get(&label) else {
+            return Err(Trap::InvalidLabel(label));
+        };
+
+        if *ip >= program_len {
+            eprintln!("ERROR: operand {ip} is outside of program bounds, program len: {program_len}");
+            return Err(Trap::InvalidLabel(label));
         }
 
         if self.flags.is(flag) {
-            self.ip = *oper as usize;
+            self.ip = *ip;
         } else {
             self.ip += 1;
         }
-        self.flags.reset();
+
         Ok(())
     }
 
@@ -127,19 +146,32 @@ impl<'a> Mm<'a> {
         }
 
         use Inst::*;
-        let inst = &self.program[self.ip];
+        let inst = self.program[self.ip].to_owned();
         match inst {
             NOP => Ok(()),
             PUSH(oper) => if self.stack.len() < Mm::STACK_CAP {
-                self.stack.push(*oper);
+                self.stack.push(oper);
                 self.ip += 1;
                 Ok(())
-            } else { Err(Trap::StackOverflow) }
+            } else { Err(Trap::StackOverflow(inst.to_owned())) }
+
             POP => if self.stack.len() >= 1 {
                 self.stack.pop();
                 self.ip += 1;
                 Ok(())
-            } else { Err(Trap::StackUnderflow) }
+            } else { Err(Trap::StackUnderflow(inst.to_owned())) }
+
+            INC => if let Some(last) = self.stack.last_mut() {
+                *last += 1;
+                self.ip += 1;
+                Ok(())
+            } else { Err(Trap::StackUnderflow(inst.to_owned())) }
+
+            DEC => if let Some(last) = self.stack.last_mut() {
+                *last -= 1;
+                self.ip += 1;
+                Ok(())
+            } else { Err(Trap::StackUnderflow(inst.to_owned())) }
 
             ADD  => self.two_opers_inst(ADD, true),
             SUB  => self.two_opers_inst(SUB, true),
@@ -148,14 +180,14 @@ impl<'a> Mm<'a> {
             CMP  => self.two_opers_inst(CMP, false),
             SWAP => self.two_opers_inst(SWAP, true),
 
-            DUP(oper) => if self.stack.len() > *oper as usize {
+            DUP(oper) => if self.stack.len() > oper as usize {
                 if self.stack.len() < Mm::STACK_CAP {
-                    let val = self.stack[self.stack.len() - 1 - *oper as usize];
+                    let val = self.stack[self.stack.len() - 1 - oper as usize];
                     self.stack.push(val);
                     self.ip += 1;
                     Ok(())
-                } else { Err(Trap::StackOverflow) }
-            } else { Err(Trap::StackUnderflow) }
+                } else { Err(Trap::StackOverflow(inst.to_owned())) }
+            } else { Err(Trap::StackUnderflow(inst.to_owned())) }
 
             JE(oper)   => self.jump_if_flag(oper, Flag::E),
             JL(oper)   => self.jump_if_flag(oper, Flag::L),
@@ -165,12 +197,34 @@ impl<'a> Mm<'a> {
             JZ(oper)   => self.jump_if_flag(oper, Flag::Z),
             JNZ(oper)  => self.jump_if_flag(oper, Flag::NZ),
 
-            JMP(oper) => if (*oper as usize) < self.program.len() {
-                self.ip = *oper as usize;
+            JMP(label) => {
+                let Some(ip) = self.labels.get(&label) else {
+                    return Err(Trap::InvalidLabel(label));
+                };
+
+                if *ip < self.program.len() {
+                    self.ip = *ip;
+                    Ok(())
+                } else {
+                    eprintln!("ERROR: label {label} is outside of program bounds, program len: {len}", len = self.program.len());
+                    Err(Trap::IllegalInstructionAccess)
+                }
+            }
+
+            LABEL(..) => {
+                self.ip += 1;
                 Ok(())
+            }
+
+            BOT => if let Some(first) = self.stack.first() {
+                if self.stack.len() < Mm::STACK_CAP {
+                    self.stack.push(*first);
+                    Ok(())
+                } else {
+                    return Err(Trap::StackOverflow(inst))
+                }
             } else {
-                eprintln!("ERROR: operand {oper} is outside of program bounds, program len: {len}", len = self.program.len());
-                Err(Trap::IllegalInstructionAccess)
+                return Err(Trap::StackUnderflow(inst))
             }
 
             HALT => {
@@ -180,18 +234,18 @@ impl<'a> Mm<'a> {
         }
     }
 
-    pub fn save_program_to_file(program: &[Inst], file_path: &str) -> std::io::Result::<()> {
+    pub fn to_binary(&self, file_path: &str) -> std::io::Result::<()> {
         use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
-        for inst in program {
+        for inst in self.program.iter() {
             f.write_all(&inst.as_bytes())?;
         }
 
         Ok(())
     }
 
-    pub fn load_program_from_file(file_path: &str) -> std::io::Result<Vec::<Inst>> {
+    pub fn from_binary(file_path: &str) -> std::io::Result<Mm> {
         use std::{fs::read, io::*};
 
         let buf = read(file_path)?;
@@ -206,27 +260,51 @@ impl<'a> Mm<'a> {
             }
         }
 
-        Ok(program)
+        Ok(Mm::new(program))
     }
 
-    pub fn translate_masm(file_path: &str) -> MResult<Vec::<Inst>> {
+    pub fn from_masm(file_path: &str) -> MResult<Mm> {
         use std::{fs::read_to_string, convert::TryFrom};
 
-        let results = read_to_string(&file_path).map_err(|err| {
+        let mut counter = 0;
+        let (labels, results) = read_to_string(&file_path).map_err(|err| {
             eprintln!("Failed to open file: {file_path}: {err}");
             err
         }).unwrap()
           .lines()
-          .filter(|l| !l.starts_with(";") && !l.trim().is_empty())
-          .map(Inst::try_from)
-          .collect::<Vec::<_>>();
+          .filter(|l| !l.starts_with(';') && !l.trim().is_empty())
+          .fold((HashMap::new(), Vec::new()), |(mut labels, mut results), l| {
+              let inst = Inst::try_from(l);
+              if let Ok(ref inst_ok) = inst {
+                  match inst_ok {
+                      Inst::LABEL(label) => { labels.insert(label.to_owned(), counter); }
+                      _ => {
+                          counter += 1;
+                          results.push(inst)
+                      }
+                  }
+              } else {
+                  results.push(inst);
+              }
+              (labels, results)
+          });
 
-        let mut ret = Vec::new();
+
+        let mut program = Vec::new();
         for res in results {
-            ret.push(res?);
+            program.push(res?);
         }
 
-        Ok(ret)
+        let mm = Mm {
+            stack: Vec::with_capacity(Mm::STACK_CAP),
+            labels,
+            flags: Flags::new(),
+            program,
+            ip: 0,
+            halt: false
+        };
+
+        Ok(mm)
     }
 
     pub fn generate_masm(program: &[Inst], file_path: &str) -> std::io::Result<()> {

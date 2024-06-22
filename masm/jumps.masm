@@ -1,7 +1,17 @@
-push 34
-push 35
-cmp
-jl 1
-add
-cmp
-jnz 2
+    push 10
+    push 420
+
+start:
+    swap
+    push 0
+    cmp
+    pop
+    dec
+    swap
+    cmp
+    je end
+    jz end
+    jmp start
+
+end:
+    halt

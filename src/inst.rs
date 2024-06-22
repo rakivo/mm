@@ -1,10 +1,12 @@
-use crate::{Word, Trap};
+use crate::{Word, Trap, InstString};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Inst {
     NOP,
     PUSH(Word),
     POP,
+    INC,
+    DEC,
     ADD,
     SUB,
     MUL,
@@ -12,82 +14,113 @@ pub enum Inst {
     CMP,
     SWAP,
     DUP(Word),
-    JE(Word),
-    JL(Word),
-    JNGE(Word),
-    JG(Word),
-    JNLE(Word),
-    JZ(Word),
-    JNZ(Word),
-    JMP(Word),
-    HALT
+
+    JE(String),
+    JL(String),
+    JNGE(String),
+    JG(String),
+    JNLE(String),
+    JZ(String),
+    JNZ(String),
+    JMP(String),
+    LABEL(String),
+
+    BOT,
+
+    HALT,
 }
 
 macro_rules! extend_from_byte {
-    ($a: expr, $ret: expr) => {{
+    (i.$a: expr, $ret: expr) => {{
         let mut bytes = vec![$a];
         bytes.extend(&$ret.to_le_bytes());
         bytes
     }};
+    ($a: expr, $ret: expr) => {{
+        let mut bytes = vec![$a];
+        bytes.extend($ret.as_bytes());
+        bytes
+    }}
 }
 
 macro_rules! inst_from_bytes {
-    ($b: ident, $ret: tt) => {{
+    (i.$b: ident, $ret: tt) => {{
         if $b.len() >= 9 {
             let mut array = [0; 8];
             array.copy_from_slice(&$b[1..9]);
             let a = Word::from_le_bytes(array);
             Ok((Inst::$ret(a), 9))
-        } else { Err(Trap::InvalidOperand(None)) }
+        } else {
+            Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
+        }
+    }};
+    ($b: ident, $ret: tt) => {{
+        if $b.len() >= 9 {
+            let mut array = [0; 8];
+            array.copy_from_slice(&$b[1..9]);
+            let a = String::from_utf8_lossy(&array).to_string();
+            Ok((Inst::$ret(a), 9))
+        } else {
+            Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
+        }
     }}
 }
 
 impl Inst {
     pub fn as_bytes(&self) -> Vec::<u8> {
+        use Inst::*;
         match self {
-            Inst::NOP        => vec![0],
-            Inst::PUSH(val)  => extend_from_byte!(1, *val),
-            Inst::POP        => vec![2],
-            Inst::ADD        => vec![3],
-            Inst::SUB        => vec![4],
-            Inst::MUL        => vec![5],
-            Inst::DIV        => vec![6],
-            Inst::CMP        => vec![7],
-            Inst::SWAP       => vec![8],
-            Inst::DUP(val)   => extend_from_byte!(9, *val),
-            Inst::JE(addr)   => extend_from_byte!(10, *addr),
-            Inst::JL(addr)   => extend_from_byte!(11, *addr),
-            Inst::JNGE(addr) => extend_from_byte!(12, *addr),
-            Inst::JG(addr)   => extend_from_byte!(13, *addr),
-            Inst::JNLE(addr) => extend_from_byte!(14, *addr),
-            Inst::JZ(addr)   => extend_from_byte!(15, *addr),
-            Inst::JNZ(addr)  => extend_from_byte!(16, *addr),
-            Inst::JMP(addr)  => extend_from_byte!(17, *addr),
-            Inst::HALT       => vec![18],
+            NOP         => vec![0],
+            PUSH(val)   => extend_from_byte!(i.1, *val),
+            POP         => vec![2],
+            INC         => vec![3],
+            DEC         => vec![4],
+            ADD         => vec![5],
+            SUB         => vec![6],
+            MUL         => vec![7],
+            DIV         => vec![8],
+            CMP         => vec![9],
+            SWAP        => vec![10],
+            DUP(val)    => extend_from_byte!(i.11, *val),
+            JE(addr)    => extend_from_byte!(12, *addr),
+            JL(addr)    => extend_from_byte!(13, *addr),
+            JNGE(addr)  => extend_from_byte!(14, *addr),
+            JG(addr)    => extend_from_byte!(15, *addr),
+            JNLE(addr)  => extend_from_byte!(16, *addr),
+            JZ(addr)    => extend_from_byte!(17, *addr),
+            JNZ(addr)   => extend_from_byte!(18, *addr),
+            JMP(addr)   => extend_from_byte!(19, *addr),
+            LABEL(addr) => extend_from_byte!(20, *addr),
+            BOT         => vec![21],
+            HALT        => vec![69],
         }
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(Inst, usize), Trap> {
-        match bytes.get(0) {
-            Some(0)  => Ok((Inst::NOP, 1)),
-            Some(1)  => inst_from_bytes!(bytes, PUSH),
-            Some(2)  => Ok((Inst::POP, 1)),
-            Some(3)  => Ok((Inst::ADD, 1)),
-            Some(4)  => Ok((Inst::SUB, 1)),
-            Some(5)  => Ok((Inst::MUL, 1)),
-            Some(6)  => Ok((Inst::DIV, 1)),
-            Some(7)  => Ok((Inst::CMP, 1)),
-            Some(8)  => Ok((Inst::SWAP, 1)),
-            Some(9)  => inst_from_bytes!(bytes, DUP),
-            Some(10) => inst_from_bytes!(bytes, JE),
-            Some(11) => inst_from_bytes!(bytes, JL),
-            Some(12) => inst_from_bytes!(bytes, JNGE),
-            Some(13) => inst_from_bytes!(bytes, JG),
-            Some(14) => inst_from_bytes!(bytes, JNLE),
-            Some(15) => inst_from_bytes!(bytes, JZ),
-            Some(16) => inst_from_bytes!(bytes, JNZ),
-            Some(17) => inst_from_bytes!(bytes, JMP),
-            Some(18) => Ok((Inst::HALT, 1)),
+        use Inst::*;
+        match bytes.first() {
+            Some(0)  => Ok((NOP, 1)),
+            Some(1)  => inst_from_bytes!(i.bytes, PUSH),
+            Some(2)  => Ok((POP, 1)),
+            Some(3)  => Ok((INC, 1)),
+            Some(4)  => Ok((DEC, 1)),
+            Some(5)  => Ok((ADD, 1)),
+            Some(6)  => Ok((SUB, 1)),
+            Some(7)  => Ok((MUL, 1)),
+            Some(8)  => Ok((DIV, 1)),
+            Some(9)  => Ok((CMP, 1)),
+            Some(10) => Ok((SWAP, 1)),
+            Some(11) => inst_from_bytes!(i.bytes, DUP),
+            Some(12) => inst_from_bytes!(bytes, JE),
+            Some(13) => inst_from_bytes!(bytes, JL),
+            Some(14) => inst_from_bytes!(bytes, JNGE),
+            Some(15) => inst_from_bytes!(bytes, JG),
+            Some(16) => inst_from_bytes!(bytes, JNLE),
+            Some(17) => inst_from_bytes!(bytes, JZ),
+            Some(18) => inst_from_bytes!(bytes, JNZ),
+            Some(19) => inst_from_bytes!(bytes, JMP),
+            Some(20) => inst_from_bytes!(bytes, LABEL),
+            Some(21) => Ok((HALT, 1)),
             _        => Err(Trap::IllegalInstruction(Some(String::from_utf8_lossy(bytes).to_string()))),
         }
     }
@@ -97,39 +130,62 @@ impl std::convert::TryFrom<&str> for Inst {
     type Error = Trap;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
+        use Inst::*;
+
         let mut splitted = s.split_whitespace();
 
         let inst_string = splitted.next();
         let inst_err = Trap::IllegalInstruction(inst_string.map(|s| s.to_owned()));
         let inst = inst_string.ok_or(inst_err.to_owned())?;
 
-        let oper_string = splitted.next();
-        let oper_err = Trap::InvalidOperand(oper_string.map(|s| s.to_owned()));
-        let oper = if let Some(ref oper) = oper_string {
-            Some(oper.parse::<Word>().map_err(|_| oper_err.to_owned())?)
-        } else { None };
+        let oper = splitted.next().map(|s| s.to_owned());
+        let oper_err = Trap::InvalidOperand(InstString(inst.to_owned(), oper.to_owned()));
+
+        let parse_word = || -> Result<Word, Self::Error> {
+            oper.to_owned().ok_or(oper_err.to_owned())?.parse::<Word>().map_err(|_| oper_err.clone())
+        };
+
+        let get_oper = || -> Result::<String, Self::Error> {
+            oper.to_owned().ok_or(oper_err.to_owned())
+        };
+
+        if matches!(inst.chars().next(), Some(ch) if ch.is_ascii()) && inst.ends_with(':') {
+            return Ok(LABEL(inst[..inst.len() - 1].to_owned()))
+        }
 
         match inst {
-            "nop"  => Ok(Inst::NOP),
-            "pop"  => Ok(Inst::POP),
-            "add"  => Ok(Inst::ADD),
-            "sub"  => Ok(Inst::SUB),
-            "mul"  => Ok(Inst::MUL),
-            "div"  => Ok(Inst::DIV),
-            "cmp"  => Ok(Inst::CMP),
-            "halt" => Ok(Inst::HALT),
-            "swap" => Ok(Inst::SWAP),
-            "push" => Ok(Inst::PUSH(oper.ok_or(oper_err.to_owned())?)),
-            "dup"  => Ok(Inst::DUP(oper.ok_or(oper_err.to_owned())?)),
-            "je"   => Ok(Inst::JE(oper.ok_or(oper_err.to_owned())?)),
-            "jl"   => Ok(Inst::JL(oper.ok_or(oper_err.to_owned())?)),
-            "jnge" => Ok(Inst::JNGE(oper.ok_or(oper_err.to_owned())?)),
-            "jg"   => Ok(Inst::JG(oper.ok_or(oper_err.to_owned())?)),
-            "jnle" => Ok(Inst::JNLE(oper.ok_or(oper_err.to_owned())?)),
-            "jz"   => Ok(Inst::JZ(oper.ok_or(oper_err.to_owned())?)),
-            "jnz"  => Ok(Inst::JNZ(oper.ok_or(oper_err.to_owned())?)),
-            "jmp"  => Ok(Inst::JMP(oper.ok_or(oper_err)?)),
-            _      => Err(inst_err)
+            "nop"  => Ok(NOP),
+            "pop"  => Ok(POP),
+            "inc"  => Ok(INC),
+            "dec"  => Ok(DEC),
+            "add"  => Ok(ADD),
+            "sub"  => Ok(SUB),
+            "mul"  => Ok(MUL),
+            "div"  => Ok(DIV),
+            "cmp"  => Ok(CMP),
+            "halt" => Ok(HALT),
+            "swap" => Ok(SWAP),
+            "push" => Ok(PUSH(parse_word()?)),
+            "dup"  => Ok(DUP(parse_word()?)),
+            "je" | "jl" | "jnge" | "jg" | "jnle" | "jz" | "jnz" | "jmp" => {
+                if parse_word().is_err() {
+                    match inst {
+                        "je"   => Ok(JE(get_oper()?)),
+                        "jl"   => Ok(JL(get_oper()?)),
+                        "jg"   => Ok(JG(get_oper()?)),
+                        "jnge" => Ok(JNGE(get_oper()?)),
+                        "jnle" => Ok(JNLE(get_oper()?)),
+                        "jz"   => Ok(JZ(get_oper()?)),
+                        "jnz"  => Ok(JNZ(get_oper()?)),
+                        "jmp"  => Ok(JMP(get_oper()?)),
+                        _ => Err(inst_err),
+                    }
+                } else {
+                    Err(oper_err)
+                }
+            }
+            "bot" => Ok(BOT),
+            _ => Err(inst_err)
         }
     }
 }
@@ -138,25 +194,60 @@ impl From<&Inst> for String {
     fn from(inst: &Inst) -> Self {
         use Inst::*;
         match inst {
-            NOP        => format!("nop"),
-            PUSH(oper) => format!("push    {oper}"),
-            POP        => format!("pop"),
-            ADD        => format!("add"),
-            SUB        => format!("sub"),
-            MUL        => format!("mul"),
-            DIV        => format!("div"),
-            CMP        => format!("cmp"),
-            SWAP       => format!("swap"),
-            DUP(oper)  => format!("dup     {oper}"),
-            JE(oper)   => format!("je      {oper}"),
-            JL(oper)   => format!("jl      {oper}"),
-            JNGE(oper) => format!("jnge    {oper}"),
-            JG(oper)   => format!("jg      {oper}"),
-            JNLE(oper) => format!("jnle    {oper}"),
-            JZ(oper)   => format!("jz      {oper}"),
-            JNZ(oper)  => format!("jnz     {oper}"),
-            JMP(oper)  => format!("jmp     {oper}"),
-            HALT       => format!("halt"),
+            NOP         => format!("nop"),
+            PUSH(oper)  => format!("push    {oper}"),
+            POP         => format!("pop"),
+            INC         => format!("inc"),
+            DEC         => format!("dec"),
+            ADD         => format!("add"),
+            SUB         => format!("sub"),
+            MUL         => format!("mul"),
+            DIV         => format!("div"),
+            CMP         => format!("cmp"),
+            SWAP        => format!("swap"),
+            DUP(oper)   => format!("dup     {oper}"),
+            JE(oper)    => format!("je      {oper}"),
+            JL(oper)    => format!("jl      {oper}"),
+            JNGE(oper)  => format!("jnge    {oper}"),
+            JG(oper)    => format!("jg      {oper}"),
+            JNLE(oper)  => format!("jnle    {oper}"),
+            JZ(oper)    => format!("jz      {oper}"),
+            JNZ(oper)   => format!("jnz     {oper}"),
+            JMP(oper)   => format!("jmp     {oper}"),
+            LABEL(oper) => format!("{oper}:"),
+            BOT         => format!("bot"),
+            HALT        => format!("halt"),
+        }
+    }
+}
+
+impl std::fmt::Display for Inst {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Inst::*;
+        match self {
+            NOP         => write!(f, "Instruction: `NOP`"),
+            PUSH(oper)  => write!(f, "Instruction: `PUSH`, operand: `{oper}`"),
+            POP         => write!(f, "Instruction: `POP`"),
+            INC         => write!(f, "Instruction: `INC`"),
+            DEC         => write!(f, "Instruction: `DEC`"),
+            ADD         => write!(f, "Instruction: `ADD`"),
+            SUB         => write!(f, "Instruction: `SUB`"),
+            MUL         => write!(f, "Instruction: `MUL`"),
+            DIV         => write!(f, "Instruction: `DIV`"),
+            CMP         => write!(f, "Instruction: `CMP`"),
+            SWAP        => write!(f, "Instruction: `SWAP`"),
+            DUP(oper)   => write!(f, "Instruction: `DUP`, operand: `{oper}`"),
+            JE(oper)    => write!(f, "Instruction: `JE`, operand: `{oper}`"),
+            JL(oper)    => write!(f, "Instruction: `JL`, operand: `{oper}`"),
+            JNGE(oper)  => write!(f, "Instruction: `JNGE`, operand: `{oper}`"),
+            JG(oper)    => write!(f, "Instruction: `JG`, operand: `{oper}`"),
+            JNLE(oper)  => write!(f, "Instruction: `JNLE`, operand: `{oper}`"),
+            JZ(oper)    => write!(f, "Instruction: `JZ`, operand: `{oper}`"),
+            JNZ(oper)   => write!(f, "Instruction: `JNZ`, operand: `{oper}`"),
+            JMP(oper)   => write!(f, "Instruction: `JMP`, operand: `{oper}`"),
+            LABEL(oper) => write!(f, "Instruction: `LABEL`, operand: `{oper}`"),
+            BOT         => write!(f, "Instruction: `BOT`"),
+            HALT        => write!(f, "Instruction: `HALT`"),
         }
     }
 }

@@ -14,15 +14,32 @@ impl Flags {
     pub fn cmp(&mut self, a: &Word, b: &Word) {
         if a == b {
             self.set(Flag::E);
-            self.set(Flag::Z);
-        } else if a < b {
+        } else {
+            self.reset(Flag::E);
+        }
+        if a < b {
             self.set(Flag::L);
-            self.set(Flag::NZ);
             self.set(Flag::NGE);
         } else {
+            self.reset(Flag::L);
+            self.reset(Flag::NGE);
+        }
+        if a > b {
             self.set(Flag::G);
-            self.set(Flag::NZ);
             self.set(Flag::NLE);
+        } else {
+            self.reset(Flag::G);
+            self.reset(Flag::NLE);
+        }
+        if *a == 0 {
+            self.set(Flag::Z);
+        } else {
+            self.reset(Flag::Z);
+        }
+        if *a != 0 {
+            self.set(Flag::NZ);
+        } else {
+            self.reset(Flag::NZ);
         }
     }
 
@@ -32,8 +49,8 @@ impl Flags {
     }
 
     #[inline]
-    pub fn reset(&mut self) {
-        self.0.iter_mut().for_each(|i| *i = false);
+    pub fn reset(&mut self, flag: Flag) {
+        self.0[flag as usize] = false;
     }
 
     #[inline]
