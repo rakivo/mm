@@ -19,7 +19,8 @@ fn main() -> std::io::Result<()> {
     }
 
     let file_path = &args[1];
-    Mm::generate_masm(PROGRAM, file_path)?;
+    let mm = Mm::new_slice(PROGRAM);
+    mm.generate_masm(file_path)?;
 
     Ok(())
 }

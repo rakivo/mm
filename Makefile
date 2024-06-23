@@ -7,7 +7,7 @@ THREADS = -Z threads=10
 BUILD_DIR = ./build
 
 all: test_examples
-examples: mm $(BUILD_DIR)/translate_masm $(BUILD_DIR)/gen_masm $(BUILD_DIR)/to_binary $(BUILD_DIR)/from_binary
+examples: mm $(BUILD_DIR)/translate_masm $(BUILD_DIR)/gen_masm $(BUILD_DIR)/to_binary $(BUILD_DIR)/from_binary $(BUILD_DIR)/gen_from_bin
 
 TRANSLATE = ./build/translate_masm
 GENERATE = ./build/gen_masm
@@ -24,14 +24,10 @@ test_fib: test_fib_for_readme
 test_fib_for_readme: mm examples
 	$(TRANSLATE) $(MASM_DIR)/fib.masm
 
-test_generating: mm examples
-	$(BUILD_DIR)/generate_masm generated.masm
-	$(TRANSLATE) generated.masm
-
 $(BUILD_DIR)/%: $(MASM_DIR)/%.masm
 	$(TRANSLATE) $<
 
-test_examples: mm examples $(BINARIES) test_generating
+test_examples: mm examples $(BINARIES)
 	$(foreach src,$(EXAMPLES_SRC),$(TRANSLATE) $(src);)
 
 mm: $(BUILD_DIR)/mm
@@ -45,10 +41,13 @@ $(BUILD_DIR)/to_binary: mm examples/to_binary.rs
 	rustc $(DEBUG_FLAGS) $(THREADS) --extern mm=$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/to_binary.rs
 
 $(BUILD_DIR)/translate_masm: mm examples/translate_masm.rs
-	rustc $(DEBUG_FLAGS) $(THREADS) --extern mm=$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/translate_masm.rs
+	rustc $(RELEASE_FLAGS) $(THREADS) --extern mm=$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/translate_masm.rs
 
 $(BUILD_DIR)/gen_masm: mm examples/gen_masm.rs
 	rustc $(DEBUG_FLAGS) $(THREADS) --extern mm=$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/gen_masm.rs
+
+$(BUILD_DIR)/gen_from_bin: mm examples/gen_from_bin.rs
+	rustc $(DEBUG_FLAGS) $(THREADS) --extern mm=$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/gen_from_bin.rs
 
 clean:
 	rm -f $(BUILD_DIR)/*

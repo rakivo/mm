@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 pub mod inst;
 pub mod flag;
 pub mod trap;
@@ -12,10 +10,13 @@ pub type Word = u64;
 pub type MResult<T> = std::result::Result::<T, Trap>;
 
 pub type Program = Vec::<Inst>;
+pub type Labels = std::collections::HashMap::<String, usize>;
+
+const DEBUG: bool = true;
 
 pub struct Mm {
     stack: Vec::<Word>,
-    labels: HashMap::<String, usize>,
+    labels: Labels,
     flags: Flags,
     program: Program,
     ip: usize,
@@ -53,12 +54,22 @@ impl std::fmt::Display for Mm {
 impl Mm {
     const STACK_CAP: usize = 1024;
 
+    fn process_labels(program: &Program) -> Labels {
+        program.iter().fold((Labels::new(), 0), |(mut labels, mut ip), inst| {
+            match inst {
+                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
+                _ => { ip += 1 }
+            } (labels, ip)
+        }).0
+    }
+
     pub fn new_slice(program: &[Inst]) -> Mm {
+        let program = program.to_vec();
         Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
-            labels: HashMap::new(),
+            labels: Self::process_labels(&program),
             flags: Flags::new(),
-            program: program.to_vec(),
+            program,
             ip: 0,
             halt: false
         }
@@ -67,7 +78,7 @@ impl Mm {
     pub fn new(program: Program) -> Mm {
         Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
-            labels: HashMap::new(),
+            labels: Self::process_labels(&program),
             flags: Flags::new(),
             program,
             ip: 0,
@@ -143,8 +154,12 @@ impl Mm {
             return Ok(())
         }
 
-        use Inst::*;
         let inst = self.program[self.ip].to_owned();
+        if DEBUG {
+            println!("{ip}: {inst}", ip = self.ip);
+        }
+
+        use Inst::*;
         match inst {
             NOP => Ok(()),
             PUSH(oper) => if self.stack.len() < Mm::STACK_CAP {
@@ -177,7 +192,7 @@ impl Mm {
             DIV  => self.two_opers_inst(DIV, true),
 
             CMP(oper) => if let Some(ref last) = self.stack.last() {
-                self.flags.cmp(&oper, last);
+                self.flags.cmp(last, &oper);
                 self.ip += 1;
                 Ok(())
             } else { Err(Trap::StackUnderflow(inst.to_owned())) }
@@ -258,16 +273,16 @@ impl Mm {
             err
         }).unwrap();
 
-        let (mut i, mut ip, mut program, mut labels) = (0, 0, Vec::new(), HashMap::new());
+        let (mut i, mut ip, mut program, mut labels) = (0, 0, Vec::new(), Labels::new());
         while i < buf.len() {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst {
-                Inst::LABEL(label) => { labels.insert(label, ip); }
+                Inst::LABEL(ref label) => { labels.insert(label.to_owned(), ip); ip += 1 }
                 _ => {
                     ip += 1;
-                    program.push(inst)
                 }
             };
+            program.push(inst);
             i += size;
         }
 
@@ -294,28 +309,29 @@ impl Mm {
             eprintln!("Failed to open file: {file_path}: {err}");
             err
         }).unwrap()
-          .lines()
-          .filter(|l| !l.starts_with(';') && !l.trim().is_empty())
-          .fold((HashMap::new(), Vec::new(), 0), |(mut labels, mut results, mut ip), l| {
-              let inst = Inst::try_from(l);
-              if let Ok(ref inst_ok) = inst {
-                  match inst_ok {
-                      Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
-                      _ => {
-                          ip += 1;
-                          results.push(inst)
-                      }
-                  }
-              } else {
-                  results.push(inst);
-              }
-              (labels, results, ip)
-          });
+            .lines()
+            .filter(|l| !l.starts_with(';') && !l.trim().is_empty())
+            .fold((Labels::new(), Vec::new(), 0), |(mut labels, mut results, mut ip), l| {
+                let inst = Inst::try_from(l);
+                if let Ok(ref inst_ok) = inst {
+                    match inst_ok {
+                        Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); ip += 1 }
+                        _ => ip += 1
+                    }
+                    results.push(inst)
+                } else {
+                    results.push(inst);
+                }
+                (labels, results, ip)
+            });
 
         let mut program = Vec::new();
         for res in results {
             program.push(res?);
         }
+
+        println!("{labels:?}");
+        println!("{program:?}");
 
         if matches!(program.last(), Some(last) if *last != Inst::HALT) {
             program.push(Inst::HALT);
@@ -333,11 +349,11 @@ impl Mm {
         Ok(mm)
     }
 
-    pub fn generate_masm(program: &[Inst], file_path: &str) -> std::io::Result<()> {
+    pub fn generate_masm(&self, file_path: &str) -> std::io::Result<()> {
         use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
-        for inst in program {
+        for inst in self.program.iter() {
             let inst_str = format!("{inst}\n", inst = String::from(inst));
             f.write_all(&inst_str.as_bytes())?;
         }
@@ -345,6 +361,7 @@ impl Mm {
         Ok(())
     }
 }
+
 
 /* TODO:
     Introduce MasmTranslator struct, that translates masm and report errors proper way.

@@ -1,7 +1,10 @@
+; First fibonacci numbers:
     push 0
     push 1
+
 .loop:
     dup 1
     dup 1
     add
-    jmp .loop
+    cmp 100000000
+    jl .loop

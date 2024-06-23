@@ -9,11 +9,11 @@ fn main() -> std::io::Result<()> {
     let program: &[Inst] = &[
         PUSH(34),
         PUSH(35),
+        ADD,
         JMP("end".to_owned()),
         LABEL("add".to_owned()),
         ADD,
         LABEL("end".to_owned()),
-        JMP("add".to_owned()),
         HALT
     ];
 
@@ -24,6 +24,11 @@ fn main() -> std::io::Result<()> {
     }
 
     let file_path = &args[1];
-    let mm = Mm::new_slice(program);
-    mm.to_binary(file_path)
+    let mut mm = Mm::new_slice(program);
+    mm.to_binary(file_path)?;
+    while !mm.halt() {
+        mm.execute().unwrap();
+        println!("{mm}");
+    }
+    Ok(())
 }
