@@ -1,7 +1,26 @@
-use crate::Word;
+use crate::{Word, Inst};
 
 #[derive(Debug, PartialEq)]
 pub enum Flag {E, L, NGE, G, NLE, NE, Z, NZ}
+
+impl TryFrom::<&Inst> for Flag {
+    type Error = ();
+
+    fn try_from(inst: &Inst) -> Result<Self, Self::Error> {
+        use { Inst::*, Flag::* };
+        match inst {
+            JE(..)   => Ok(E),
+            JL(..)   => Ok(L),
+            JNGE(..) => Ok(NGE),
+            JG(..)   => Ok(G),
+            JNLE(..) => Ok(NLE),
+            JNE(..)  => Ok(NE),
+            JZ(..)   => Ok(Z),
+            JNZ(..)  => Ok(NZ),
+            _ => Err(())
+        }
+    }
+}
 
 pub struct Flags([bool; 8]);
 

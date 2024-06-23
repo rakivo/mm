@@ -128,15 +128,15 @@ impl Mm {
         Ok(())
     }
 
-    fn jump_if_flag(&mut self, label: String, flag: Flag) -> Result<(), Trap> {
+    fn jump_if_flag(&mut self, label: &str, flag: Flag) -> Result<(), Trap> {
         let program_len = self.program.len();
-        let Some(ip) = self.labels.get(&label) else {
-            return Err(Trap::InvalidLabel(label, "Not found in label map".to_owned()));
+        let Some(ip) = self.labels.get(&label.to_owned()) else {
+            return Err(Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned()));
         };
 
         if *ip >= program_len {
             eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {program_len}");
-            return Err(Trap::InvalidLabel(label, "Out of bounds".to_owned()));
+            return Err(Trap::InvalidLabel(label.to_owned(), "Out of bounds".to_owned()));
         }
 
         if self.flags.is(flag) {
@@ -208,14 +208,14 @@ impl Mm {
                 } else { Err(Trap::StackOverflow(inst.to_owned())) }
             } else { Err(Trap::StackUnderflow(inst.to_owned())) }
 
-            JE(oper)   => self.jump_if_flag(oper, Flag::E),
-            JL(oper)   => self.jump_if_flag(oper, Flag::L),
-            JNGE(oper) => self.jump_if_flag(oper, Flag::NGE),
-            JG(oper)   => self.jump_if_flag(oper, Flag::G),
-            JNLE(oper) => self.jump_if_flag(oper, Flag::NLE),
-            JNE(oper)  => self.jump_if_flag(oper, Flag::NE),
-            JZ(oper)   => self.jump_if_flag(oper, Flag::Z),
-            JNZ(oper)  => self.jump_if_flag(oper, Flag::NZ),
+              JE(ref oper)
+            | JL(ref oper)
+            | JG(ref oper)
+            | JNGE(ref oper)
+            | JNE(ref oper)
+            | JNLE(ref oper)
+            | JZ(ref oper)
+            | JNZ(ref oper) => self.jump_if_flag(oper, Flag::try_from(&inst).unwrap()),
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
