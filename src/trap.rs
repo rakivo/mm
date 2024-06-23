@@ -9,7 +9,7 @@ pub enum Trap {
     StackUnderflow(Inst),
     DivisionByZero(Inst),
     InvalidOperand(InstString),
-    InvalidLabel(String),
+    InvalidLabel(String, String),
     IllegalInstruction(Option::<String>),
     IllegalInstructionAccess
 }
@@ -29,11 +29,11 @@ impl std::fmt::Debug for Trap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Trap::*;
         match self {
-            StackOverflow(inst)          => write!(f, "ERROR: Stack overflow, Last executed: {inst}"),
-            StackUnderflow(inst)         => write!(f, "ERROR: Stack underflow, Last executed: {inst}"),
-            DivisionByZero(inst)         => write!(f, "ERROR: Division by zero, Last executed: {inst}"),
-            InvalidOperand(inst)         => write!(f, "ERROR: Invalid operand, Last executed: {inst}"),
-            InvalidLabel(label)          => write!(f, "ERROR: Invalid label: {label}"),
+            StackOverflow(inst)          => write!(f, "ERROR: Stack overflow, Last executed {inst}"),
+            StackUnderflow(inst)         => write!(f, "ERROR: Stack underflow, Last executed {inst}"),
+            DivisionByZero(inst)         => write!(f, "ERROR: Division by zero, Last executed {inst}"),
+            InvalidOperand(inst)         => write!(f, "ERROR: Invalid operand, Last executed {inst}"),
+            InvalidLabel(label, reason)  => write!(f, "ERROR: Invalid label: `{label}`: {reason}"),
             IllegalInstruction(inst_opt) => if let Some(inst) = inst_opt {
                 write!(f, "ERROR: Illegal instruction: {inst}")
             } else {

@@ -1,17 +1,11 @@
-    push 10
-    push 420
+    push 34
+    push 35
+    jmp end
 
-start:
-    swap
-    push 0
-    cmp
-    pop
-    dec
-    swap
-    cmp
-    je end
-    jz end
-    jmp start
+add:
+    add
 
 end:
+    cmp 69
+    jne add
     halt

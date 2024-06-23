@@ -13,7 +13,7 @@ fn main() -> std::io::Result<()> {
     let input_file_path = &args[1];
 
     let mut mm = Mm::from_masm(&input_file_path).unwrap();
-    let mut i = 420;
+    let mut i = 69;
     while i > 0 && !mm.halt() {
         mm.execute().unwrap();
         i -= 1;

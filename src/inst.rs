@@ -11,7 +11,7 @@ pub enum Inst {
     SUB,
     MUL,
     DIV,
-    CMP,
+    CMP(Word),
     SWAP,
     DUP(Word),
 
@@ -20,6 +20,7 @@ pub enum Inst {
     JNGE(String),
     JG(String),
     JNLE(String),
+    JNE(String),
     JZ(String),
     JNZ(String),
     JMP(String),
@@ -38,7 +39,10 @@ macro_rules! extend_from_byte {
     }};
     ($a: expr, $ret: expr) => {{
         let mut bytes = vec![$a];
-        bytes.extend($ret.as_bytes());
+        let str_bytes = $ret.as_bytes();
+        let str_len = str_bytes.len() as u64;
+        bytes.extend(&str_len.to_le_bytes());
+        bytes.extend(str_bytes);
         bytes
     }}
 }
@@ -54,12 +58,18 @@ macro_rules! inst_from_bytes {
             Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
         }
     }};
-    ($b: ident, $ret: tt) => {{
+    ($b:ident, $ret:tt) => {{
         if $b.len() >= 9 {
-            let mut array = [0; 8];
-            array.copy_from_slice(&$b[1..9]);
-            let a = String::from_utf8_lossy(&array).to_string();
-            Ok((Inst::$ret(a), 9))
+            let mut len_array = [0; 8];
+            len_array.copy_from_slice(&$b[1..9]);
+            let str_len = u64::from_le_bytes(len_array) as usize;
+            if $b.len() >= 9 + str_len {
+                let str_bytes = &$b[9..9 + str_len];
+                let a = String::from_utf8_lossy(str_bytes).to_string();
+                Ok((Inst::$ret(a), 9 + str_len))
+            } else {
+                Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
+            }
         } else {
             Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
         }
@@ -79,7 +89,7 @@ impl Inst {
             SUB         => vec![6],
             MUL         => vec![7],
             DIV         => vec![8],
-            CMP         => vec![9],
+            CMP(val)    => extend_from_byte!(i.9, *val),
             SWAP        => vec![10],
             DUP(val)    => extend_from_byte!(i.11, *val),
             JE(addr)    => extend_from_byte!(12, *addr),
@@ -87,11 +97,12 @@ impl Inst {
             JNGE(addr)  => extend_from_byte!(14, *addr),
             JG(addr)    => extend_from_byte!(15, *addr),
             JNLE(addr)  => extend_from_byte!(16, *addr),
-            JZ(addr)    => extend_from_byte!(17, *addr),
-            JNZ(addr)   => extend_from_byte!(18, *addr),
-            JMP(addr)   => extend_from_byte!(19, *addr),
-            LABEL(addr) => extend_from_byte!(20, *addr),
-            BOT         => vec![21],
+            JNE(addr)   => extend_from_byte!(17, *addr),
+            JZ(addr)    => extend_from_byte!(18, *addr),
+            JNZ(addr)   => extend_from_byte!(19, *addr),
+            JMP(addr)   => extend_from_byte!(20, *addr),
+            LABEL(addr) => extend_from_byte!(21, *addr),
+            BOT         => vec![22],
             HALT        => vec![69],
         }
     }
@@ -108,7 +119,7 @@ impl Inst {
             Some(6)  => Ok((SUB, 1)),
             Some(7)  => Ok((MUL, 1)),
             Some(8)  => Ok((DIV, 1)),
-            Some(9)  => Ok((CMP, 1)),
+            Some(9)  => inst_from_bytes!(i.bytes, CMP),
             Some(10) => Ok((SWAP, 1)),
             Some(11) => inst_from_bytes!(i.bytes, DUP),
             Some(12) => inst_from_bytes!(bytes, JE),
@@ -116,11 +127,13 @@ impl Inst {
             Some(14) => inst_from_bytes!(bytes, JNGE),
             Some(15) => inst_from_bytes!(bytes, JG),
             Some(16) => inst_from_bytes!(bytes, JNLE),
-            Some(17) => inst_from_bytes!(bytes, JZ),
-            Some(18) => inst_from_bytes!(bytes, JNZ),
-            Some(19) => inst_from_bytes!(bytes, JMP),
-            Some(20) => inst_from_bytes!(bytes, LABEL),
-            Some(21) => Ok((HALT, 1)),
+            Some(17) => inst_from_bytes!(bytes, JNE),
+            Some(18) => inst_from_bytes!(bytes, JZ),
+            Some(19) => inst_from_bytes!(bytes, JNZ),
+            Some(20) => inst_from_bytes!(bytes, JMP),
+            Some(21) => inst_from_bytes!(bytes, LABEL),
+            Some(22) => Ok((BOT, 1)),
+            Some(69) => Ok((HALT, 1)),
             _        => Err(Trap::IllegalInstruction(Some(String::from_utf8_lossy(bytes).to_string()))),
         }
     }
@@ -162,12 +175,12 @@ impl std::convert::TryFrom<&str> for Inst {
             "sub"  => Ok(SUB),
             "mul"  => Ok(MUL),
             "div"  => Ok(DIV),
-            "cmp"  => Ok(CMP),
+            "cmp"  => Ok(CMP(parse_word()?)),
             "halt" => Ok(HALT),
             "swap" => Ok(SWAP),
             "push" => Ok(PUSH(parse_word()?)),
             "dup"  => Ok(DUP(parse_word()?)),
-            "je" | "jl" | "jnge" | "jg" | "jnle" | "jz" | "jnz" | "jmp" => {
+            "je" | "jl" | "jnge" | "jg" | "jnle" | "jne" | "jz" | "jnz" | "jmp" => {
                 if parse_word().is_err() {
                     match inst {
                         "je"   => Ok(JE(get_oper()?)),
@@ -175,6 +188,7 @@ impl std::convert::TryFrom<&str> for Inst {
                         "jg"   => Ok(JG(get_oper()?)),
                         "jnge" => Ok(JNGE(get_oper()?)),
                         "jnle" => Ok(JNLE(get_oper()?)),
+                        "jne"  => Ok(JNE(get_oper()?)),
                         "jz"   => Ok(JZ(get_oper()?)),
                         "jnz"  => Ok(JNZ(get_oper()?)),
                         "jmp"  => Ok(JMP(get_oper()?)),
@@ -203,7 +217,7 @@ impl From<&Inst> for String {
             SUB         => format!("sub"),
             MUL         => format!("mul"),
             DIV         => format!("div"),
-            CMP         => format!("cmp"),
+            CMP(oper)   => format!("cmp     {oper}"),
             SWAP        => format!("swap"),
             DUP(oper)   => format!("dup     {oper}"),
             JE(oper)    => format!("je      {oper}"),
@@ -211,6 +225,7 @@ impl From<&Inst> for String {
             JNGE(oper)  => format!("jnge    {oper}"),
             JG(oper)    => format!("jg      {oper}"),
             JNLE(oper)  => format!("jnle    {oper}"),
+            JNE(oper)   => format!("jne     {oper}"),
             JZ(oper)    => format!("jz      {oper}"),
             JNZ(oper)   => format!("jnz     {oper}"),
             JMP(oper)   => format!("jmp     {oper}"),
@@ -234,7 +249,7 @@ impl std::fmt::Display for Inst {
             SUB         => write!(f, "Instruction: `SUB`"),
             MUL         => write!(f, "Instruction: `MUL`"),
             DIV         => write!(f, "Instruction: `DIV`"),
-            CMP         => write!(f, "Instruction: `CMP`"),
+            CMP(oper)   => write!(f, "Instruction: `CMP`, operand: `{oper}`"),
             SWAP        => write!(f, "Instruction: `SWAP`"),
             DUP(oper)   => write!(f, "Instruction: `DUP`, operand: `{oper}`"),
             JE(oper)    => write!(f, "Instruction: `JE`, operand: `{oper}`"),
@@ -242,6 +257,7 @@ impl std::fmt::Display for Inst {
             JNGE(oper)  => write!(f, "Instruction: `JNGE`, operand: `{oper}`"),
             JG(oper)    => write!(f, "Instruction: `JG`, operand: `{oper}`"),
             JNLE(oper)  => write!(f, "Instruction: `JNLE`, operand: `{oper}`"),
+            JNE(oper)   => write!(f, "Instruction: `JNE`, operand: `{oper}`"),
             JZ(oper)    => write!(f, "Instruction: `JZ`, operand: `{oper}`"),
             JNZ(oper)   => write!(f, "Instruction: `JNZ`, operand: `{oper}`"),
             JMP(oper)   => write!(f, "Instruction: `JMP`, operand: `{oper}`"),

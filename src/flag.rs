@@ -1,21 +1,23 @@
 use crate::Word;
 
 #[derive(Debug, PartialEq)]
-pub enum Flag {E, L, NGE, G, NLE, Z, NZ}
+pub enum Flag {E, L, NGE, G, NLE, NE, Z, NZ}
 
-pub struct Flags([bool; 7]);
+pub struct Flags([bool; 8]);
 
 impl Flags {
     #[inline]
     pub fn new() -> Flags {
-        Flags([false; 7])
+        Flags([false; 8])
     }
 
     pub fn cmp(&mut self, a: &Word, b: &Word) {
         if a == b {
             self.set(Flag::E);
+            self.reset(Flag::NE);
         } else {
             self.reset(Flag::E);
+            self.set(Flag::NE);
         }
         if a < b {
             self.set(Flag::L);

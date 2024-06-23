@@ -11,12 +11,13 @@ pub use trap::*;
 pub type Word = u64;
 pub type MResult<T> = std::result::Result::<T, Trap>;
 
+pub type Program = Vec::<Inst>;
+
 pub struct Mm {
     stack: Vec::<Word>,
     labels: HashMap::<String, usize>,
     flags: Flags,
-    program: Vec::<Inst>,
-
+    program: Program,
     ip: usize,
     halt: bool
 }
@@ -63,13 +64,12 @@ impl Mm {
         }
     }
 
-    pub fn new(program: Vec::<Inst>) -> Mm {
+    pub fn new(program: Program) -> Mm {
         Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
             labels: HashMap::new(),
             flags: Flags::new(),
             program,
-
             ip: 0,
             halt: false
         }
@@ -94,6 +94,7 @@ impl Mm {
         } else {
             self.stack[stack_len - 1].to_owned()
         };
+
         let prelast = &mut self.stack[stack_len - 2];
         match inst {
             ADD => *prelast += last,
@@ -102,9 +103,6 @@ impl Mm {
             DIV => if last != 0 {
                 *prelast /= last
             } else { return Err(Trap::DivisionByZero(inst)) }
-            CMP => if stack_len < Mm::STACK_CAP {
-                self.flags.cmp(&*prelast, &last);
-            } else { return Err(Trap::StackOverflow(inst)) }
             SWAP => {
                 let a = *prelast;
                 let b = last;
@@ -122,12 +120,12 @@ impl Mm {
     fn jump_if_flag(&mut self, label: String, flag: Flag) -> Result<(), Trap> {
         let program_len = self.program.len();
         let Some(ip) = self.labels.get(&label) else {
-            return Err(Trap::InvalidLabel(label));
+            return Err(Trap::InvalidLabel(label, "Not found in label map".to_owned()));
         };
 
         if *ip >= program_len {
-            eprintln!("ERROR: operand {ip} is outside of program bounds, program len: {program_len}");
-            return Err(Trap::InvalidLabel(label));
+            eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {program_len}");
+            return Err(Trap::InvalidLabel(label, "Out of bounds".to_owned()));
         }
 
         if self.flags.is(flag) {
@@ -155,7 +153,7 @@ impl Mm {
                 Ok(())
             } else { Err(Trap::StackOverflow(inst.to_owned())) }
 
-            POP => if self.stack.len() >= 1 {
+            POP => if !self.stack.is_empty() {
                 self.stack.pop();
                 self.ip += 1;
                 Ok(())
@@ -177,7 +175,13 @@ impl Mm {
             SUB  => self.two_opers_inst(SUB, true),
             MUL  => self.two_opers_inst(MUL, true),
             DIV  => self.two_opers_inst(DIV, true),
-            CMP  => self.two_opers_inst(CMP, false),
+
+            CMP(oper) => if let Some(ref last) = self.stack.last() {
+                self.flags.cmp(&oper, last);
+                self.ip += 1;
+                Ok(())
+            } else { Err(Trap::StackUnderflow(inst.to_owned())) }
+
             SWAP => self.two_opers_inst(SWAP, true),
 
             DUP(oper) => if self.stack.len() > oper as usize {
@@ -194,20 +198,21 @@ impl Mm {
             JNGE(oper) => self.jump_if_flag(oper, Flag::NGE),
             JG(oper)   => self.jump_if_flag(oper, Flag::G),
             JNLE(oper) => self.jump_if_flag(oper, Flag::NLE),
+            JNE(oper)  => self.jump_if_flag(oper, Flag::NE),
             JZ(oper)   => self.jump_if_flag(oper, Flag::Z),
             JNZ(oper)  => self.jump_if_flag(oper, Flag::NZ),
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
-                    return Err(Trap::InvalidLabel(label));
+                    return Err(Trap::InvalidLabel(label, "Not found in label map".to_owned()));
                 };
 
                 if *ip < self.program.len() {
                     self.ip = *ip;
                     Ok(())
                 } else {
-                    eprintln!("ERROR: label {label} is outside of program bounds, program len: {len}", len = self.program.len());
-                    Err(Trap::IllegalInstructionAccess)
+                    eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {len}", len = self.program.len());
+                    Err(Trap::InvalidLabel(label, "Out of bounds".to_owned()))
                 }
             }
 
@@ -245,55 +250,72 @@ impl Mm {
         Ok(())
     }
 
-    pub fn from_binary(file_path: &str) -> std::io::Result<Mm> {
-        use std::{fs::read, io::*};
+    pub fn from_binary(file_path: &str) -> MResult<Mm> {
+        use std::fs::read;
 
-        let buf = read(file_path)?;
-        let (mut i, mut program) = (0, Vec::new());
+        let buf = read(file_path).map_err(|err| {
+            eprintln!("Failed to read file: {file_path}: {err}");
+            err
+        }).unwrap();
+
+        let (mut i, mut ip, mut program, mut labels) = (0, 0, Vec::new(), HashMap::new());
         while i < buf.len() {
-            match Inst::from_bytes(&buf[i..]) {
-                Ok((inst, size)) => {
-                    program.push(inst);
-                    i += size;
+            let (inst, size) = Inst::from_bytes(&buf[i..])?;
+            match inst {
+                Inst::LABEL(label) => { labels.insert(label, ip); }
+                _ => {
+                    ip += 1;
+                    program.push(inst)
                 }
-                Err(e) => return Err(Error::new(ErrorKind::InvalidData, format!("{e:?}")))
-            }
+            };
+            i += size;
         }
 
-        Ok(Mm::new(program))
+        program.push(Inst::NOP);
+
+        let mm = Mm {
+            stack: Vec::with_capacity(Mm::STACK_CAP),
+            labels,
+            flags: Flags::new(),
+            program,
+            ip: 0,
+            halt: false
+        };
+
+        Ok(mm)
     }
 
     pub fn from_masm(file_path: &str) -> MResult<Mm> {
         use std::{fs::read_to_string, convert::TryFrom};
 
-        let mut counter = 0;
-        let (labels, results) = read_to_string(&file_path).map_err(|err| {
+        let (labels, results, _) = read_to_string(&file_path).map_err(|err| {
             eprintln!("Failed to open file: {file_path}: {err}");
             err
         }).unwrap()
           .lines()
           .filter(|l| !l.starts_with(';') && !l.trim().is_empty())
-          .fold((HashMap::new(), Vec::new()), |(mut labels, mut results), l| {
+          .fold((HashMap::new(), Vec::new(), 0), |(mut labels, mut results, mut ip), l| {
               let inst = Inst::try_from(l);
               if let Ok(ref inst_ok) = inst {
                   match inst_ok {
-                      Inst::LABEL(label) => { labels.insert(label.to_owned(), counter); }
+                      Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
                       _ => {
-                          counter += 1;
+                          ip += 1;
                           results.push(inst)
                       }
                   }
               } else {
                   results.push(inst);
               }
-              (labels, results)
+              (labels, results, ip)
           });
-
 
         let mut program = Vec::new();
         for res in results {
             program.push(res?);
         }
+
+        program.push(Inst::NOP);
 
         let mm = Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
