@@ -6,7 +6,7 @@ THREADS = -Z threads=10
 
 BUILD_DIR = ./build
 
-all: test_examples
+all: examples
 examples: mm $(BUILD_DIR)/translate_masm $(BUILD_DIR)/gen_masm $(BUILD_DIR)/to_binary $(BUILD_DIR)/from_binary $(BUILD_DIR)/gen_from_bin
 
 TRANSLATE = ./build/translate_masm

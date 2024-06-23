@@ -3,6 +3,38 @@ use crate::Inst;
 #[derive(Clone)]
 pub struct InstString(pub String, pub Option::<String>);
 
+impl From::<Inst> for InstString {
+    fn from(inst: Inst) -> Self {
+        use Inst::*;
+        match inst {
+            NOP         => InstString("nop".to_owned(), None),
+            PUSH(oper)  => InstString("push".to_owned(), Some(oper.to_string())),
+            POP         => InstString("pop".to_owned(), None),
+            INC         => InstString("inc".to_owned(), None),
+            DEC         => InstString("dec".to_owned(), None),
+            ADD         => InstString("add".to_owned(), None),
+            SUB         => InstString("sub".to_owned(), None),
+            MUL         => InstString("mul".to_owned(), None),
+            DIV         => InstString("div".to_owned(), None),
+            CMP(oper)   => InstString("cmp".to_owned(), Some(oper.to_string())),
+            SWAP        => InstString("swap".to_owned(), None),
+            DUP(oper)   => InstString("dup".to_owned(), Some(oper.to_string())),
+            JE(oper)    => InstString("je".to_owned(), Some(oper)),
+            JL(oper)    => InstString("jl".to_owned(), Some(oper)),
+            JNGE(oper)  => InstString("jnge".to_owned(), Some(oper)),
+            JG(oper)    => InstString("jg".to_owned(), Some(oper)),
+            JNLE(oper)  => InstString("jnle".to_owned(), Some(oper)),
+            JNE(oper)   => InstString("jne".to_owned(), Some(oper)),
+            JZ(oper)    => InstString("jz".to_owned(), Some(oper)),
+            JNZ(oper)   => InstString("jnz".to_owned(), Some(oper)),
+            JMP(oper)   => InstString("jmp".to_owned(), Some(oper)),
+            LABEL(oper) => InstString(oper, None),
+            BOT         => InstString("bot".to_owned(), None),
+            HALT        => InstString("halt".to_owned(), None)
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum Trap {
     StackOverflow(Inst),

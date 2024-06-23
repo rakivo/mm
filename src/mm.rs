@@ -12,7 +12,7 @@ pub type MResult<T> = std::result::Result::<T, Trap>;
 pub type Program = Vec::<Inst>;
 pub type Labels = std::collections::HashMap::<String, usize>;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 pub struct Mm {
     stack: Vec::<Word>,
@@ -57,7 +57,7 @@ impl Mm {
     fn process_labels(program: &Program) -> Labels {
         program.iter().fold((Labels::new(), 0), |(mut labels, mut ip), inst| {
             match inst {
-                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
+                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); ip += 1; }
                 _ => { ip += 1 }
             } (labels, ip)
         }).0
@@ -278,9 +278,7 @@ impl Mm {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst {
                 Inst::LABEL(ref label) => { labels.insert(label.to_owned(), ip); ip += 1 }
-                _ => {
-                    ip += 1;
-                }
+                _ => ip += 1
             };
             program.push(inst);
             i += size;
@@ -305,36 +303,29 @@ impl Mm {
     pub fn from_masm(file_path: &str) -> MResult<Mm> {
         use std::{fs::read_to_string, convert::TryFrom};
 
-        let (labels, results, _) = read_to_string(&file_path).map_err(|err| {
+        let results = read_to_string(&file_path).map_err(|err| {
             eprintln!("Failed to open file: {file_path}: {err}");
             err
         }).unwrap()
-            .lines()
-            .filter(|l| !l.starts_with(';') && !l.trim().is_empty())
-            .fold((Labels::new(), Vec::new(), 0), |(mut labels, mut results, mut ip), l| {
-                let inst = Inst::try_from(l);
-                if let Ok(ref inst_ok) = inst {
-                    match inst_ok {
-                        Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); ip += 1 }
-                        _ => ip += 1
-                    }
-                    results.push(inst)
-                } else {
-                    results.push(inst);
-                }
-                (labels, results, ip)
-            });
+          .lines()
+          .filter(|l| !l.starts_with(';') && !l.trim().is_empty())
+          .map(Inst::try_from)
+          .collect::<Vec::<_>>();
 
         let mut program = Vec::new();
         for res in results {
             program.push(res?);
         }
 
-        println!("{labels:?}");
-        println!("{program:?}");
-
         if matches!(program.last(), Some(last) if *last != Inst::HALT) {
             program.push(Inst::HALT);
+        }
+
+        let labels = Self::process_labels(&program);
+
+        if DEBUG {
+            println!("{labels:?}");
+            println!("{program:?}");
         }
 
         let mm = Mm {
@@ -364,5 +355,6 @@ impl Mm {
 
 
 /* TODO:
+    Use lifetimes to get rid of cloning values instead of taking reference
     Introduce MasmTranslator struct, that translates masm and report errors proper way.
 */

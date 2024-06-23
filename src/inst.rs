@@ -31,28 +31,46 @@ pub enum Inst {
     HALT,
 }
 
-macro_rules! extend_from_byte {
-    (i.$a: expr, $ret: expr) => {{
-        let mut bytes = vec![$a];
-        bytes.extend(&$ret.to_le_bytes());
-        bytes
-    }};
-    ($a: expr, $ret: expr) => {{
-        let mut bytes = vec![$a];
-        let str_bytes = $ret.as_bytes();
-        let str_len = str_bytes.len() as u64;
-        bytes.extend(&str_len.to_le_bytes());
-        bytes.extend(str_bytes);
-        bytes
-    }}
+const MAX_STR_LEN: usize = 16 * 8;
+const INSTRUCTION_SIZE: usize = 1 * 8;
+
+fn extend_from_bytes_word(n: u8, val: Word) -> &'static [u8] {
+    let mut bytes = [0u8; INSTRUCTION_SIZE + 1];
+    bytes[0] = n;
+    let le_bytes = &val.to_le_bytes();
+    assert!(le_bytes.len() == 8);
+    bytes[1..].copy_from_slice(le_bytes);
+    unsafe { std::slice::from_raw_parts(bytes.as_ptr(), INSTRUCTION_SIZE + 1) }
+}
+
+fn extend_from_bytes_string(n: u8, val: &str) -> &'static [u8] {
+    let mut bytes = [0u8; INSTRUCTION_SIZE + MAX_STR_LEN + 1];
+    bytes[0] = n;
+    let str_bytes = val.as_bytes();
+    let str_len = str_bytes.len();
+    assert!(str_len <= MAX_STR_LEN, "Ohh shoot mate, your string is too long, maximum string length: {MAX_STR_LEN}");
+    let part_one_end = INSTRUCTION_SIZE + 1;
+    let le_bytes = (str_len as Word).to_le_bytes();
+    assert!(le_bytes.len() == 8);
+    bytes[1..part_one_end].copy_from_slice(&le_bytes);
+    bytes[part_one_end..part_one_end + str_len].copy_from_slice(str_bytes);
+    unsafe { std::slice::from_raw_parts(bytes.as_ptr(), part_one_end + str_len) }
+}
+
+fn word_from_bytes(bytes: &[u8]) -> Word {
+    let mut array = [0; 8];
+    array.copy_from_slice(&bytes[1..9]);
+    Word::from_le_bytes(array)
+}
+
+fn string_from_bytes(bytes: &[u8], n: usize) -> String {
+    String::from_utf8_lossy(&bytes[9..9 + n]).to_string()
 }
 
 macro_rules! inst_from_bytes {
     (i.$b: ident, $ret: tt) => {{
         if $b.len() >= 9 {
-            let mut array = [0; 8];
-            array.copy_from_slice(&$b[1..9]);
-            let a = Word::from_le_bytes(array);
+            let a = word_from_bytes(&$b);
             Ok((Inst::$ret(a), 9))
         } else {
             Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
@@ -60,12 +78,9 @@ macro_rules! inst_from_bytes {
     }};
     ($b:ident, $ret:tt) => {{
         if $b.len() >= 9 {
-            let mut len_array = [0; 8];
-            len_array.copy_from_slice(&$b[1..9]);
-            let str_len = u64::from_le_bytes(len_array) as usize;
+            let str_len = word_from_bytes(&$b) as usize;
             if $b.len() >= 9 + str_len {
-                let str_bytes = &$b[9..9 + str_len];
-                let a = String::from_utf8_lossy(str_bytes).to_string();
+                let a = string_from_bytes(&$b, str_len);
                 Ok((Inst::$ret(a), 9 + str_len))
             } else {
                 Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
@@ -77,33 +92,33 @@ macro_rules! inst_from_bytes {
 }
 
 impl Inst {
-    pub fn as_bytes(&self) -> Vec::<u8> {
+    pub fn as_bytes(&self) -> &[u8] {
         use Inst::*;
         match self {
-            NOP         => vec![0],
-            PUSH(val)   => extend_from_byte!(i.1, *val),
-            POP         => vec![2],
-            INC         => vec![3],
-            DEC         => vec![4],
-            ADD         => vec![5],
-            SUB         => vec![6],
-            MUL         => vec![7],
-            DIV         => vec![8],
-            CMP(val)    => extend_from_byte!(i.9, *val),
-            SWAP        => vec![10],
-            DUP(val)    => extend_from_byte!(i.11, *val),
-            JE(addr)    => extend_from_byte!(12, *addr),
-            JL(addr)    => extend_from_byte!(13, *addr),
-            JNGE(addr)  => extend_from_byte!(14, *addr),
-            JG(addr)    => extend_from_byte!(15, *addr),
-            JNLE(addr)  => extend_from_byte!(16, *addr),
-            JNE(addr)   => extend_from_byte!(17, *addr),
-            JZ(addr)    => extend_from_byte!(18, *addr),
-            JNZ(addr)   => extend_from_byte!(19, *addr),
-            JMP(addr)   => extend_from_byte!(20, *addr),
-            LABEL(addr) => extend_from_byte!(21, *addr),
-            BOT         => vec![22],
-            HALT        => vec![69],
+            NOP         => &[0],
+            PUSH(val)   => extend_from_bytes_word(1, *val),
+            POP         => &[2],
+            INC         => &[3],
+            DEC         => &[4],
+            ADD         => &[5],
+            SUB         => &[6],
+            MUL         => &[7],
+            DIV         => &[8],
+            CMP(val)    => extend_from_bytes_word(9, *val),
+            SWAP        => &[10],
+            DUP(val)    => extend_from_bytes_word(11, *val),
+            JE(addr)    => extend_from_bytes_string(12, addr),
+            JL(addr)    => extend_from_bytes_string(13, addr),
+            JNGE(addr)  => extend_from_bytes_string(14, addr),
+            JG(addr)    => extend_from_bytes_string(15, addr),
+            JNLE(addr)  => extend_from_bytes_string(16, addr),
+            JNE(addr)   => extend_from_bytes_string(17, addr),
+            JZ(addr)    => extend_from_bytes_string(18, addr),
+            JNZ(addr)   => extend_from_bytes_string(19, addr),
+            JMP(addr)   => extend_from_bytes_string(20, addr),
+            LABEL(addr) => extend_from_bytes_string(21, addr),
+            BOT         => &[22],
+            HALT        => &[69],
         }
     }
 
@@ -155,7 +170,7 @@ impl std::convert::TryFrom<&str> for Inst {
         let oper_err = Trap::InvalidOperand(InstString(inst.to_owned(), oper.to_owned()));
 
         let parse_word = || -> Result<Word, Self::Error> {
-            oper.to_owned().ok_or(oper_err.to_owned())?.parse::<Word>().map_err(|_| oper_err.clone())
+            oper.to_owned().ok_or(oper_err.to_owned())?.parse::<Word>().map_err(|_| oper_err.to_owned())
         };
 
         let get_oper = || -> Result::<String, Self::Error> {
