@@ -271,7 +271,9 @@ impl Mm {
             i += size;
         }
 
-        program.push(Inst::NOP);
+        if matches!(program.last(), Some(last) if *last != Inst::HALT) {
+            program.push(Inst::HALT);
+        }
 
         let mm = Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
@@ -315,7 +317,9 @@ impl Mm {
             program.push(res?);
         }
 
-        program.push(Inst::NOP);
+        if matches!(program.last(), Some(last) if *last != Inst::HALT) {
+            program.push(Inst::HALT);
+        }
 
         let mm = Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),

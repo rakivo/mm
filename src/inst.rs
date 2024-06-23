@@ -1,6 +1,6 @@
 use crate::{Word, Trap, InstString};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Inst {
     NOP,
     PUSH(Word),
