@@ -55,11 +55,11 @@ impl Mm {
     const STACK_CAP: usize = 1024;
 
     fn process_labels(program: &Program) -> Labels {
-        program.iter().fold((Labels::new(), 0), |(mut labels, mut ip), inst| {
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
             match inst {
-                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); ip += 1; }
-                _ => { ip += 1 }
-            } (labels, ip)
+                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
+                _ => {}
+            } (labels, ip + 1)
         }).0
     }
 
@@ -277,9 +277,10 @@ impl Mm {
         while i < buf.len() {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst {
-                Inst::LABEL(ref label) => { labels.insert(label.to_owned(), ip); ip += 1 }
-                _ => ip += 1
+                Inst::LABEL(ref label) => { labels.insert(label.to_owned(), ip); }
+                _ => {}
             };
+            ip += 1;
             program.push(inst);
             i += size;
         }
