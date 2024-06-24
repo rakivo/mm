@@ -24,11 +24,6 @@ fn main() -> std::io::Result<()> {
     }
 
     let file_path = &args[1];
-    let mut mm = Mm::new_slice(program);
-    mm.to_binary(file_path)?;
-    while !mm.halt() {
-        mm.execute().unwrap();
-        println!("{mm}");
-    }
-    Ok(())
+    let mm = Mm::new_slice(program);
+    mm.to_binary(file_path)
 }

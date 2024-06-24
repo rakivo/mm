@@ -154,7 +154,7 @@ impl Inst {
     }
 }
 
-impl std::convert::TryFrom<&str> for Inst {
+impl TryFrom<&str> for Inst {
     type Error = Trap;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {

@@ -7,7 +7,7 @@ THREADS = -Z threads=10
 BUILD_DIR = ./build
 
 all: examples
-examples: mm $(BUILD_DIR)/translate_masm $(BUILD_DIR)/gen_masm $(BUILD_DIR)/to_binary $(BUILD_DIR)/from_binary $(BUILD_DIR)/gen_from_bin
+examples: mm $(BUILD_DIR)/translate_masm $(BUILD_DIR)/gen_masm $(BUILD_DIR)/to_binary $(BUILD_DIR)/from_binary $(BUILD_DIR)/gen_from_bin $(BUILD_DIR)/masm_to_bin
 
 TRANSLATE = ./build/translate_masm
 GENERATE = ./build/gen_masm
@@ -48,6 +48,9 @@ $(BUILD_DIR)/gen_masm: mm examples/gen_masm.rs
 
 $(BUILD_DIR)/gen_from_bin: mm examples/gen_from_bin.rs
 	rustc $(DEBUG_FLAGS) $(THREADS) --extern mm=$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/gen_from_bin.rs
+
+$(BUILD_DIR)/masm_to_bin: mm examples/masm_to_bin.rs
+	rustc $(DEBUG_FLAGS) $(THREADS) --extern mm=$(BUILD_DIR)/debug/libmm.rlib -o $@ examples/masm_to_bin.rs
 
 clean:
 	rm -f $(BUILD_DIR)/*

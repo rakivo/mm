@@ -29,15 +29,15 @@ impl std::fmt::Debug for Trap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Trap::*;
         match self {
-            StackOverflow(inst)          => write!(f, "ERROR: Stack overflow, Last executed {inst}"),
-            StackUnderflow(inst)         => write!(f, "ERROR: Stack underflow, Last executed {inst}"),
-            DivisionByZero(inst)         => write!(f, "ERROR: Division by zero, Last executed {inst}"),
-            InvalidOperand(inst)         => write!(f, "ERROR: Invalid operand, Last executed {inst}"),
-            InvalidLabel(label, reason)  => write!(f, "ERROR: Invalid label: `{label}`: {reason}"),
+            StackOverflow(inst)          => write!(f, "Stack overflow, Last executed {inst}"),
+            StackUnderflow(inst)         => write!(f, "Stack underflow, Last executed {inst}"),
+            DivisionByZero(inst)         => write!(f, "Division by zero, Last executed {inst}"),
+            InvalidOperand(inst)         => write!(f, "Invalid operand, Last executed {inst}"),
+            InvalidLabel(label, reason)  => write!(f, "Invalid label: `{label}`: {reason}"),
             IllegalInstruction(inst_opt) => if let Some(inst) = inst_opt {
-                write!(f, "ERROR: Illegal instruction: {inst}")
+                write!(f, "Illegal instruction: {inst}")
             } else {
-                write!(f, "ERROR: Illegal instruction")
+                write!(f, "Illegal instruction")
             }
             IllegalInstructionAccess     => write!(f, "Illegal instruction access"),
         }

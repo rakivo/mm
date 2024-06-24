@@ -1,18 +1,20 @@
 pub mod inst;
 pub mod flag;
 pub mod trap;
+pub mod parser;
 
 pub use inst::*;
 pub use flag::*;
 pub use trap::*;
+pub use parser::*;
+
+const DEBUG: bool = false;
 
 pub type Word = u64;
 pub type MResult<T> = std::result::Result::<T, Trap>;
 
 pub type Program = Vec::<Inst>;
 pub type Labels = std::collections::HashMap::<String, usize>;
-
-const DEBUG: bool = false;
 
 pub struct Mm {
     stack: Vec::<Word>,
@@ -287,46 +289,6 @@ impl Mm {
 
         if matches!(program.last(), Some(last) if *last != Inst::HALT) {
             program.push(Inst::HALT);
-        }
-
-        let mm = Mm {
-            stack: Vec::with_capacity(Mm::STACK_CAP),
-            labels,
-            flags: Flags::new(),
-            program,
-            ip: 0,
-            halt: false
-        };
-
-        Ok(mm)
-    }
-
-    pub fn from_masm(file_path: &str) -> MResult<Mm> {
-        use std::{fs::read_to_string, convert::TryFrom};
-
-        let results = read_to_string(&file_path).map_err(|err| {
-            eprintln!("Failed to open file: {file_path}: {err}");
-            err
-        }).unwrap()
-          .lines()
-          .filter(|l| !l.starts_with(';') && !l.trim().is_empty())
-          .map(Inst::try_from)
-          .collect::<Vec::<_>>();
-
-        let mut program = Vec::new();
-        for res in results {
-            program.push(res?);
-        }
-
-        if matches!(program.last(), Some(last) if *last != Inst::HALT) {
-            program.push(Inst::HALT);
-        }
-
-        let labels = Self::process_labels(&program);
-
-        if DEBUG {
-            println!("{labels:?}");
-            println!("{program:?}");
         }
 
         let mm = Mm {
