@@ -14,17 +14,12 @@ impl std::fmt::Debug for MTrap<'_> {
     }
 }
 
-pub trait Mirthual {
-    fn try_from_masm(file_path: &str) -> Result::<Self, MTrap>
-    where
-        Self: Sized;
-}
-
 type MProgram = Vec::<MResult::<Inst>>;
 
 fn parse_labels(line: &str) -> MProgram {
 // label1, label2:
 //     ...
+
     line.split(',')
         .map(|label| Ok(Inst::LABEL(label.trim().to_owned())))
         .collect()
@@ -39,8 +34,8 @@ fn parse_line(line: &str) -> MProgram {
     }
 }
 
-impl Mirthual for Mm {
-    fn try_from_masm(file_path: &str) -> Result::<Mm, MTrap>
+impl Mm {
+    pub fn try_from_masm(file_path: &str) -> Result::<Mm, MTrap>
     where
         Self: Sized
     {
