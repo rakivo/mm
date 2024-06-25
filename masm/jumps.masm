@@ -2,7 +2,6 @@
     push 35
     jmp end
 
-    jmp fuck you
 add, addable:
     add
 

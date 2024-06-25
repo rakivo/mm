@@ -162,12 +162,18 @@ impl TryFrom<&str> for Inst {
 
         let mut splitted = s.split_whitespace();
 
-        let inst_string = splitted.next();
-        let inst_err = Trap::IllegalInstruction(inst_string.map(|s| s.to_owned()));
-        let inst = inst_string.ok_or(inst_err.to_owned())?;
+        let (inst_err, inst) = {
+            let inst_string = splitted.next();
+            let inst_err = Trap::IllegalInstruction(inst_string.map(|s| s.to_owned()));
+            let inst = inst_string.ok_or(inst_err.to_owned())?;
+            (inst_err, inst)
+        };
 
-        let oper = splitted.next().map(|s| s.to_owned());
-        let oper_err = Trap::InvalidOperand(InstString(inst.to_owned(), oper.to_owned()));
+        let (oper_err, oper) = {
+            let oper = splitted.next().map(|s| s.to_owned());
+            let oper_err = Trap::InvalidOperand(InstString(inst.to_owned(), oper.to_owned()));
+            (oper_err, oper)
+        };
 
         let parse_word = || -> Result<Word, Self::Error> {
             oper.to_owned().ok_or(oper_err.to_owned())?.parse::<Word>().map_err(|_| oper_err.to_owned())
@@ -200,14 +206,14 @@ impl TryFrom<&str> for Inst {
                     match inst {
                         "je"   => Ok(JE(get_oper()?)),
                         "jl"   => Ok(JL(get_oper()?)),
-                        "jg"   => Ok(JG(get_oper()?)),
                         "jnge" => Ok(JNGE(get_oper()?)),
+                        "jg"   => Ok(JG(get_oper()?)),
                         "jnle" => Ok(JNLE(get_oper()?)),
                         "jne"  => Ok(JNE(get_oper()?)),
                         "jz"   => Ok(JZ(get_oper()?)),
                         "jnz"  => Ok(JNZ(get_oper()?)),
                         "jmp"  => Ok(JMP(get_oper()?)),
-                        _ => Err(inst_err),
+                        _ => unreachable!()
                     }
                 } else {
                     Err(oper_err)

@@ -56,6 +56,15 @@ impl std::fmt::Display for Mm {
 impl Mm {
     const STACK_CAP: usize = 1024;
 
+    fn process_labels_m(program: &MProgram) -> Labels {
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
+            match &inst.0 {
+                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
+                _ => {}
+            } (labels, ip + 1)
+        }).0
+    }
+
     fn process_labels(program: &Program) -> Labels {
         program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
             match inst {
@@ -210,18 +219,18 @@ impl Mm {
                 } else { Err(Trap::StackOverflow(inst.to_owned())) }
             } else { Err(Trap::StackUnderflow(inst.to_owned())) }
 
-              JE(ref oper)
-            | JL(ref oper)
-            | JG(ref oper)
-            | JNGE(ref oper)
-            | JNE(ref oper)
-            | JNLE(ref oper)
-            | JZ(ref oper)
-            | JNZ(ref oper) => self.jump_if_flag(oper, Flag::try_from(&inst).unwrap()),
+              JE(ref label)
+            | JL(ref label)
+            | JG(ref label)
+            | JNGE(ref label)
+            | JNE(ref label)
+            | JNLE(ref label)
+            | JZ(ref label)
+            | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
-                    return Err(Trap::InvalidLabel(label, "Not found in label map".to_owned()));
+                    return Err(Trap::InvalidLabel(label, "Not found in label map".to_owned()))
                 };
 
                 if *ip < self.program.len() {
@@ -275,7 +284,7 @@ impl Mm {
             err
         }).unwrap();
 
-        let (mut i, mut ip, mut program, mut labels) = (0, 0, Vec::new(), Labels::new());
+        let (mut i, mut ip, mut program, mut labels) = (0, 0, Program::new(), Labels::new());
         while i < buf.len() {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst {
