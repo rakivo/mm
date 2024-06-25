@@ -1,8 +1,10 @@
+pub mod nan;
 pub mod inst;
 pub mod flag;
 pub mod trap;
 pub mod parser;
 
+pub use nan::*;
 pub use inst::*;
 pub use flag::*;
 pub use trap::*;
