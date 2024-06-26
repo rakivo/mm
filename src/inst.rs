@@ -60,7 +60,7 @@ fn extend_from_bytes_string(n: u8, val: &str) -> &'static [u8] {
 fn word_from_bytes(bytes: &[u8]) -> Word {
     let mut array = [0; 8];
     array.copy_from_slice(&bytes[1..9]);
-    Word::from_le_bytes(&array)
+    Word { as_u64: u64::from_le_bytes(array) }
 }
 
 fn string_from_bytes(bytes: &[u8], n: usize) -> String {
