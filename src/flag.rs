@@ -1,4 +1,4 @@
-use crate::{Word, Inst};
+use crate::Inst;
 
 #[derive(Debug, PartialEq)]
 pub enum Flag {E, L, NGE, G, NLE, NE, Z, NZ}
@@ -30,7 +30,7 @@ impl Flags {
         Flags([false; 8])
     }
 
-    pub fn cmp(&mut self, a: &Word, b: &Word) {
+    pub fn cmp(&mut self, a: &u64, b: &u64) {
         if a == b {
             self.set(Flag::E);
             self.reset(Flag::NE);

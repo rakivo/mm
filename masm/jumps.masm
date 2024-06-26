@@ -2,7 +2,7 @@
     push 35
     jmp end
 
-add, addable:
+add:
     add
 
 end:

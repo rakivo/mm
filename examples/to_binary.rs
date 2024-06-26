@@ -7,8 +7,8 @@ use Inst::*;
 
 fn main() -> std::io::Result<()> {
     let program: &[Inst] = &[
-        PUSH(34),
-        PUSH(35),
+        PUSH(Word {as_u64: 34}),
+        PUSH(Word {as_u64: 35}),
         ADD,
         JMP("end".to_owned()),
         LABEL("add".to_owned()),

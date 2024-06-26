@@ -1,18 +1,18 @@
-pub mod nan;
 pub mod inst;
 pub mod flag;
 pub mod trap;
+pub mod word;
 pub mod parser;
 
-pub use nan::*;
 pub use inst::*;
 pub use flag::*;
 pub use trap::*;
+pub use word::*;
 pub use parser::*;
 
+const _: () = assert!(std::mem::size_of::<Word>() == 8, "The mm's Word is designed to be 64bit");
 const DEBUG: bool = false;
 
-pub type Word = u64;
 pub type MResult<T> = std::result::Result::<T, Trap>;
 
 pub type Program = Vec::<Inst>;
@@ -33,7 +33,7 @@ impl std::fmt::Debug for Mm {
         write!(f, "stack:")?;
         let mut i = 0;
         while i < self.stack.len() {
-            write!(f, "\n\t{oper}", oper = self.stack[i])?;
+            write!(f, "\n\t{oper}", oper = unsafe { self.stack[i].as_u64 })?;
             i += 1;
         }
         Ok(())
@@ -44,10 +44,10 @@ impl std::fmt::Display for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: ")?;
         if let Some(first) = self.stack.first() {
-            write!(f, "{first}")?;
+            write!(f, "{f}", f = unsafe { first.as_u64 })?;
             let (mut i, n) = (1, self.stack.len());
             while i < n {
-                write!(f, ", {oper}", oper = self.stack[i])?;
+                write!(f, ", {oper}", oper = unsafe { self.stack[i].as_u64 })?;
                 i += 1;
             }
         }
@@ -113,13 +113,15 @@ impl Mm {
         }
 
         use Inst::*;
-        let last = if pop {
-            self.stack.pop().unwrap()
-        } else {
-            self.stack[stack_len - 1].to_owned()
+        let last = unsafe {
+            if pop {
+                self.stack.pop().unwrap().as_u64
+            } else {
+                self.stack[stack_len - 1].as_u64
+            }
         };
 
-        let prelast = &mut self.stack[stack_len - 2];
+        let prelast = &mut unsafe { self.stack[stack_len - 2].as_u64 };
         match inst {
             ADD => *prelast += last,
             SUB => *prelast -= last,
@@ -128,8 +130,8 @@ impl Mm {
                 *prelast /= last
             } else { return Err(Trap::DivisionByZero(inst)) }
             SWAP => {
-                let a = *prelast;
-                let b = last;
+                let a = Word { as_u64: *prelast };
+                let b = Word { as_u64: last };
                 self.stack.pop();
                 self.stack.push(b);
                 self.stack.push(a);
@@ -188,13 +190,13 @@ impl Mm {
             } else { Err(Trap::StackUnderflow(inst.to_owned())) }
 
             INC => if let Some(last) = self.stack.last_mut() {
-                *last += 1;
+                unsafe { last.as_u64 += 1; }
                 self.ip += 1;
                 Ok(())
             } else { Err(Trap::StackUnderflow(inst.to_owned())) }
 
             DEC => if let Some(last) = self.stack.last_mut() {
-                *last -= 1;
+                unsafe { last.as_u64 -= 1; }
                 self.ip += 1;
                 Ok(())
             } else { Err(Trap::StackUnderflow(inst.to_owned())) }
@@ -205,16 +207,16 @@ impl Mm {
             DIV  => self.two_opers_inst(DIV, true),
 
             CMP(oper) => if let Some(ref last) = self.stack.last() {
-                self.flags.cmp(last, &oper);
+                self.flags.cmp(&unsafe { last.as_u64 }, &unsafe { oper.as_u64 });
                 self.ip += 1;
                 Ok(())
             } else { Err(Trap::StackUnderflow(inst.to_owned())) }
 
             SWAP => self.two_opers_inst(SWAP, true),
+            DUP(oper) => if self.stack.len() > unsafe { oper.as_u64 } as _ {
 
-            DUP(oper) => if self.stack.len() > oper as usize {
                 if self.stack.len() < Mm::STACK_CAP {
-                    let val = self.stack[self.stack.len() - 1 - oper as usize];
+                    let val = self.stack[self.stack.len() - 1 - unsafe { oper.as_u64 } as usize];
                     self.stack.push(val);
                     self.ip += 1;
                     Ok(())
@@ -298,8 +300,11 @@ impl Mm {
             i += size;
         }
 
-        if matches!(program.last(), Some(last) if *last != Inst::HALT) {
-            program.push(Inst::HALT);
+        if let Some(last) = program.last() {
+            match last {
+                Inst::HALT => {},
+                _ => program.push(Inst::HALT)
+            }
         }
 
         let mm = Mm {

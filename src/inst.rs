@@ -1,6 +1,6 @@
 use crate::{Word, Trap, InstString};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Inst {
     NOP,
     PUSH(Word),
@@ -37,9 +37,9 @@ const INSTRUCTION_SIZE: usize = 1 * 8;
 fn extend_from_bytes_word(n: u8, val: Word) -> &'static [u8] {
     let mut bytes = [0u8; INSTRUCTION_SIZE + 1];
     bytes[0] = n;
-    let le_bytes = &val.to_le_bytes();
+    let le_bytes = unsafe { &val.as_u64 }.to_le_bytes();
     assert!(le_bytes.len() == 8);
-    bytes[1..].copy_from_slice(le_bytes);
+    bytes[1..].copy_from_slice(&le_bytes);
     unsafe { std::slice::from_raw_parts(bytes.as_ptr(), INSTRUCTION_SIZE + 1) }
 }
 
@@ -50,7 +50,7 @@ fn extend_from_bytes_string(n: u8, val: &str) -> &'static [u8] {
     let str_len = str_bytes.len();
     assert!(str_len <= MAX_STR_LEN, "Ohh shoot mate, your string is too long, maximum string length: {MAX_STR_LEN}");
     let part_one_end = INSTRUCTION_SIZE + 1;
-    let le_bytes = (str_len as Word).to_le_bytes();
+    let le_bytes = (str_len as u64).to_le_bytes();
     assert!(le_bytes.len() == 8);
     bytes[1..part_one_end].copy_from_slice(&le_bytes);
     bytes[part_one_end..part_one_end + str_len].copy_from_slice(str_bytes);
@@ -60,7 +60,7 @@ fn extend_from_bytes_string(n: u8, val: &str) -> &'static [u8] {
 fn word_from_bytes(bytes: &[u8]) -> Word {
     let mut array = [0; 8];
     array.copy_from_slice(&bytes[1..9]);
-    Word::from_le_bytes(array)
+    Word::from_le_bytes(&array)
 }
 
 fn string_from_bytes(bytes: &[u8], n: usize) -> String {
@@ -78,7 +78,7 @@ macro_rules! inst_from_bytes {
     }};
     ($b:ident, $ret:tt) => {{
         if $b.len() >= 9 {
-            let str_len = word_from_bytes(&$b) as usize;
+            let str_len = unsafe { word_from_bytes(&$b).as_u64 } as usize;
             if $b.len() >= 9 + str_len {
                 let a = string_from_bytes(&$b, str_len);
                 Ok((Inst::$ret(a), 9 + str_len))
@@ -228,9 +228,9 @@ impl TryFrom<&str> for Inst {
 impl From<&Inst> for String {
     fn from(inst: &Inst) -> Self {
         use Inst::*;
-        match inst {
+        unsafe { match inst {
             NOP         => format!("    nop"),
-            PUSH(oper)  => format!("    push    {oper}"),
+            PUSH(oper)  => format!("    push    {oper}", oper = oper.as_u64),
             POP         => format!("    pop"),
             INC         => format!("    inc"),
             DEC         => format!("    dec"),
@@ -238,9 +238,9 @@ impl From<&Inst> for String {
             SUB         => format!("    sub"),
             MUL         => format!("    mul"),
             DIV         => format!("    div"),
-            CMP(oper)   => format!("    cmp     {oper}"),
+            CMP(oper)   => format!("    cmp     {oper}", oper = oper.as_u64),
             SWAP        => format!("    swap"),
-            DUP(oper)   => format!("    dup     {oper}"),
+            DUP(oper)   => format!("    dup     {oper}", oper = oper.as_u64),
             JE(oper)    => format!("    je      {oper}"),
             JL(oper)    => format!("    jl      {oper}"),
             JNGE(oper)  => format!("    jnge    {oper}"),
@@ -253,16 +253,16 @@ impl From<&Inst> for String {
             LABEL(oper) => format!("{oper}:"),
             BOT         => format!("    bot"),
             HALT        => format!("    halt"),
-        }
+        } }
     }
 }
 
 impl std::fmt::Display for Inst {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Inst::*;
-        match self {
+        unsafe { match self {
             NOP         => write!(f, "Instruction: `NOP`"),
-            PUSH(oper)  => write!(f, "Instruction: `PUSH`, operand: `{oper}`"),
+            PUSH(oper)  => write!(f, "Instruction: `PUSH`, operand: `{oper}`", oper = oper.as_u64),
             POP         => write!(f, "Instruction: `POP`"),
             INC         => write!(f, "Instruction: `INC`"),
             DEC         => write!(f, "Instruction: `DEC`"),
@@ -270,9 +270,9 @@ impl std::fmt::Display for Inst {
             SUB         => write!(f, "Instruction: `SUB`"),
             MUL         => write!(f, "Instruction: `MUL`"),
             DIV         => write!(f, "Instruction: `DIV`"),
-            CMP(oper)   => write!(f, "Instruction: `CMP`, operand: `{oper}`"),
+            CMP(oper)   => write!(f, "Instruction: `CMP`, operand: `{oper}`", oper = oper.as_u64),
             SWAP        => write!(f, "Instruction: `SWAP`"),
-            DUP(oper)   => write!(f, "Instruction: `DUP`, operand: `{oper}`"),
+            DUP(oper)   => write!(f, "Instruction: `DUP`, operand: `{oper}`", oper = oper.as_u64),
             JE(oper)    => write!(f, "Instruction: `JE`, operand: `{oper}`"),
             JL(oper)    => write!(f, "Instruction: `JL`, operand: `{oper}`"),
             JNGE(oper)  => write!(f, "Instruction: `JNGE`, operand: `{oper}`"),
@@ -285,6 +285,15 @@ impl std::fmt::Display for Inst {
             LABEL(oper) => write!(f, "Instruction: `LABEL`, operand: `{oper}`"),
             BOT         => write!(f, "Instruction: `BOT`"),
             HALT        => write!(f, "Instruction: `HALT`"),
-        }
+        } }
+    }
+}
+
+impl std::str::FromStr for Word {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let value = s.parse::<u64>()?;
+        Ok(Word {as_u64: value})
     }
 }

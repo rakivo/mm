@@ -38,7 +38,7 @@ test_examples: mm examples $(BINARIES)
 	$(foreach src,$(EXAMPLES_SRC),$(TRANSLATE) $(src);)
 
 mm: $(BUILD_DIR)/libmm.rlib
-$(BUILD_DIR)/libmm.rlib: src/mm.rs src/flag.rs src/inst.rs src/trap.rs src/regs.rs src/nan.rs src/parser.rs
+$(BUILD_DIR)/libmm.rlib: src/mm.rs src/flag.rs src/inst.rs src/trap.rs src/regs.rs src/word.rs src/parser.rs
 	rustc $(RUST_FLAGS) $(LIB_FLAGS) -o $@ $<
 
 $(BUILD_DIR)/from_binary: mm examples/from_binary.rs

@@ -6,8 +6,8 @@ use mm::*;
 use mm::Inst::{self, *};
 
 const PROGRAM: &[Inst] = &[
-    PUSH(34),
-    PUSH(35),
+    PUSH(Word {as_u64: 34}),
+    PUSH(Word {as_u64: 35}),
     ADD
 ];
 
