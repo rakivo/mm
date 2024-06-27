@@ -11,7 +11,7 @@ BUILD_DIR = ./build
 MMLIB_PATH = $(BUILD_DIR)/libmm.rlib
 
 all: examples
-examples: $(BUILD_DIR) $(BUILD_DIR)/libmm.rlib $(BUILD_DIR)/translate_masm $(BUILD_DIR)/gen_masm $(BUILD_DIR)/to_binary $(BUILD_DIR)/from_binary $(BUILD_DIR)/gen_from_bin $(BUILD_DIR)/masm_to_bin
+examples: $(BUILD_DIR) $(BUILD_DIR)/libmm.rlib $(BUILD_DIR)/translate_masm $(BUILD_DIR)/gen_masm $(BUILD_DIR)/gen_from_bin $(BUILD_DIR)/masm_to_bin
 
 TRANSLATE = ./build/translate_masm
 GENERATE = ./build/gen_masm
@@ -40,9 +40,6 @@ test_examples: mm examples $(BINARIES)
 mm: $(BUILD_DIR)/libmm.rlib
 $(BUILD_DIR)/libmm.rlib: src/mm.rs src/flag.rs src/inst.rs src/trap.rs src/regs.rs src/nan.rs src/parser.rs
 	rustc $(RUST_FLAGS) $(LIB_FLAGS) -o $@ $<
-
-$(BUILD_DIR)/from_binary: mm examples/from_binary.rs
-	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/from_binary.rs
 
 $(BUILD_DIR)/translate_masm: mm examples/translate_masm.rs
 	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/translate_masm.rs

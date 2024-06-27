@@ -86,7 +86,8 @@ impl Mm {
 
         let mut program = MProgram::new();
         for (row, line) in file.lines().enumerate() {
-            if line.trim().is_empty() || line.starts_with(';') { continue }
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with(';') { continue }
             parse_line(&line, &mut program, row, file_path).unwrap_or_report();
         }
 
@@ -145,7 +146,3 @@ where
         }
     }
 }
-
-/* TODO:
-    Compile time checks for invalid labels
-*/

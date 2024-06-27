@@ -31,8 +31,8 @@ pub struct Mm {
 
 #[inline]
 fn print_oper(oper: &Word) {
-    if oper.is_u64() {
-        print!("{f}", f = oper.as_u64())
+    if oper.is_u64() || oper.is_i64() {
+        print!("{f}", f = oper.as_i64())
     } else if oper.is_f64() {
         print!("{oper}")
     } else { todo!() }
@@ -40,8 +40,8 @@ fn print_oper(oper: &Word) {
 
 #[inline]
 fn print_oper_f(f: &mut std::fmt::Formatter<'_>, oper: &Word) -> std::fmt::Result {
-    if oper.is_u64() {
-        write!(f, "{f}", f = oper.as_u64())
+    if oper.is_u64() || oper.is_i64() {
+        write!(f, "{f}", f = oper.as_i64())
     } else if oper.is_f64() {
         write!(f, "{oper}")
     } else { todo!() }
@@ -52,8 +52,8 @@ fn print_oper_s<S>(mut f: S, oper: &Word) -> std::io::Result<()>
 where
     S: std::io::Write
 {
-    if oper.is_u64() {
-        write!(f, "{f}", f = oper.as_u64())
+    if oper.is_u64() || oper.is_i64() {
+        write!(f, "{f}", f = oper.as_i64())
     } else if oper.is_f64() {
         write!(f, "{oper}")
     } else { todo!() }
@@ -336,10 +336,14 @@ impl Mm {
                 }
             }
 
-            JE(ref label) | JL(ref label) | JG(ref label) | JNGE(ref label) | JNE(ref label)
-                | JNLE(ref label) | JZ(ref label) | JNZ(ref label) => {
-                    self.jump_if_flag(label, Flag::try_from(&inst).unwrap())
-                }
+              JE(ref label)
+            | JL(ref label)
+            | JG(ref label)
+            | JNGE(ref label)
+            | JNE(ref label)
+            | JNLE(ref label)
+            | JZ(ref label)
+            | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
@@ -480,6 +484,8 @@ impl Mm {
     ```
     fn func:
     ```
+
+    (#6) Add debug messages like `started parsing at: hh:mm::ss`, `started execution at ...`.
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
     2. Introduce MasmTranslator struct, that translates masm and report errors proper way.

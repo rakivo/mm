@@ -1,16 +1,130 @@
-divide_and_dump:
+_start:
+    push 10
+    push 5
+    push 2
+    push 3
+    push 8
+    push 6
+    push 9
+    jmp start_operations
+
+start_operations:
+    dup 1       ; Duplicate the top stack element (9)
+    dmp 1
+    inc         ; Increment the top stack element by 1 (10)
+    dmp 1
+    swap        ; Swap the top two stack elements (6, 10)
+    dmp 1
+    pop         ; Remove the top stack element (6)
+    dmp 1
+    push 12
+    push 4
+    idiv        ; Divide 12 by 4 (result is 3)
+    dmp 1
+    push 15
+    push 5
+    imul        ; Multiply 15 by 5 (result is 75)
+    dmp 1
+    push 30
+    push 3
+    isub        ; Subtract 3 from 30 (result is 27)
+    dmp 1
+    push 40
+    push 20
+    iadd        ; Add 40 and 20 (result is 60)
+    dmp 1
+
+check_operations:
+    cmp 27      ; Compare the top stack element with 27
+    je equal_27
+    jl less_than_27
+    jg greater_than_27
+
+equal_27:
+    push 100
+    dmp 1
+    jmp next_section
+
+less_than_27:
+    push 50
+    dmp 1
+    jmp next_section
+
+greater_than_27:
+    push 200
+    dmp 1
+
+next_section:
+    push 3.14   ; Push a floating point number
+    push 2.71
+    fadd        ; Add two floating point numbers
+    dmp 1
+    push 9.81
+    push 1.62
+    fmul        ; Multiply two floating point numbers
+    dmp 1
+
+    push 25
+    push 5
+    jmp divide_and_dump ; Jump to divide and dump section
+
+further_operations:
+    push 7
+    push 8
+    iadd
+    dmp 1
+    push 14
+    push 2
+    isub
+    dmp 1
+    push 10
+    push 2
+    imul
+    dmp 1
+    push 36
+    push 6
     idiv
+    dmp 1
+
+loop_example:
+    push 5
+
+loop_start:
+    dmp 1
+    dec
+    dup 1
+    cmp 0
+    jg loop_start
+
+final_operations:
+    ; Using a mathematical trick to get the number 69
+    push 23
+    push 3
+    imul        ; Multiply 23 by 3 (result is 69)
+    dmp 1
+
+    ; Additional calculations to get the number 69
+    push 46
+    push 23
+    iadd        ; Add 46 and 23 (result is 69)
+    dmp 1
+
+    push 138
+    push 2
+    idiv        ; Divide 138 by 2 (result is 69)
+    dmp 1
+
+cleanup:
+    ; Clear the stack, leaving only the number 69
+    pop
+    pop
     dmp 1
     jmp halt
 
-_start:
-    push 34
-    push 35
-    iadd
+divide_and_dump:
+    idiv
     dmp 1
-    push 840
-    push 2
-    jmp divide_and_dump
+    jmp further_operations
 
 halt:
     halt

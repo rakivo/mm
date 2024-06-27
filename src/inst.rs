@@ -176,7 +176,6 @@ impl Inst {
             Some(26) => Ok((FDIV, 1)),
 
             Some(27) => {
-                println!("{bytes:?}");
                 let inst = DMP(if bytes.len() == 2 {
                     bytes[1]
                 } else {
