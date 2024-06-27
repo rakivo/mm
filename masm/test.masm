@@ -1,0 +1,16 @@
+divide_and_dump:
+    idiv
+    dmp 1
+    jmp halt
+
+_start:
+    push 34
+    push 35
+    iadd
+    dmp 1
+    push 840
+    push 2
+    jmp divide_and_dump
+
+halt:
+    halt

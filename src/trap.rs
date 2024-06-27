@@ -1,6 +1,7 @@
 use crate::{Inst, Type};
 
 #[derive(Clone)]
+// Inst, operand
 pub struct InstString(pub String, pub Option::<String>);
 
 #[derive(Clone)]
@@ -8,10 +9,11 @@ pub enum Trap {
     StackOverflow(Inst),
     StackUnderflow(Inst),
     DivisionByZero(Inst),
+    IllegalInstructionAccess,
+    NoEntryPointFound(String),
     InvalidOperand(InstString),
     InvalidLabel(String, String),
     IllegalInstruction(Option::<String>),
-    IllegalInstructionAccess,
     DivisionOfDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
 }
 
@@ -37,9 +39,8 @@ impl std::fmt::Debug for Trap {
             InvalidLabel(label, reason)        => write!(f, "Invalid label: `{label}`: {reason}"),
             IllegalInstruction(inst_opt)       => if let Some(inst) = inst_opt {
                 write!(f, "Illegal instruction: {inst}")
-            } else {
-                write!(f, "Illegal instruction")
-            }
+            } else { write!(f, "Illegal instruction") }
+            NoEntryPointFound(file_path)       => write!(f, "No entry point found in: {file_path}"),
             IllegalInstructionAccess           => write!(f, "Illegal instruction access"),
             DivisionOfDifferentTypes(ty1, ty2) => write!(f, "Can't divide different types, type 1: {ty1:?}, type 2: {ty2:?}")
         }

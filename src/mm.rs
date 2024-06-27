@@ -10,7 +10,9 @@ pub use inst::*;
 pub use trap::*;
 pub use parser::*;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
+
+const ENTRY_POINT_LABEL: &str = "_start";
 
 pub type Word = NaNBox;
 pub type MResult<T> = std::result::Result<T, Trap>;
@@ -27,6 +29,36 @@ pub struct Mm {
     halt: bool,
 }
 
+#[inline]
+fn print_oper(oper: &Word) {
+    if oper.is_u64() {
+        print!("{f}", f = oper.as_u64())
+    } else if oper.is_f64() {
+        print!("{oper}")
+    } else { todo!() }
+}
+
+#[inline]
+fn print_oper_f(f: &mut std::fmt::Formatter<'_>, oper: &Word) -> std::fmt::Result {
+    if oper.is_u64() {
+        write!(f, "{f}", f = oper.as_u64())
+    } else if oper.is_f64() {
+        write!(f, "{oper}")
+    } else { todo!() }
+}
+
+#[inline]
+fn print_oper_s<S>(mut f: S, oper: &Word) -> std::io::Result<()>
+where
+    S: std::io::Write
+{
+    if oper.is_u64() {
+        write!(f, "{f}", f = oper.as_u64())
+    } else if oper.is_f64() {
+        write!(f, "{oper}")
+    } else { todo!() }
+}
+
 impl std::fmt::Debug for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack size: {size}\n", size = self.stack.len())?;
@@ -34,11 +66,8 @@ impl std::fmt::Debug for Mm {
         let mut i = 0;
         while i < self.stack.len() {
             let oper = self.stack[i];
-            if oper.is_u64() {
-                write!(f, ", {oper}", oper = oper.as_u64())?;
-            } else if oper.is_f64() {
-                write!(f, ", {oper}")?;
-            } else { todo!() }
+            write!(f, ", ")?;
+            print_oper(&oper);
             i += 1;
         }
         Ok(())
@@ -49,20 +78,12 @@ impl std::fmt::Display for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: ")?;
         if let Some(first) = self.stack.first() {
-            if first.is_u64() {
-                write!(f, "{f}", f = first.as_u64())?;
-            } else if first.is_f64() {
-                write!(f, "{first}")?;
-            } else { todo!() }
-
+            print_oper(&first);
             let (mut i, n) = (1, self.stack.len());
             while i < n {
                 let oper = self.stack[i];
-                if oper.is_u64() {
-                    write!(f, ", {oper}", oper = oper.as_u64())?;
-                } else if oper.is_f64() {
-                    write!(f, ", {oper}")?;
-                } else { todo!() }
+                write!(f, ", ")?;
+                print_oper(&oper);
                 i += 1;
             }
         }
@@ -74,33 +95,21 @@ impl Mm {
     const STACK_CAP: usize = 1024;
 
     fn process_labels_m(program: &MProgram) -> Labels {
-        program
-            .iter()
-            .fold((Labels::new(), 0), |(mut labels, ip), inst| {
-                match &inst.0 {
-                    Inst::LABEL(label) => {
-                        labels.insert(label.to_owned(), ip);
-                    }
-                    _ => {}
-                }
-                (labels, ip + 1)
-            })
-            .0
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
+            match &inst.0 {
+                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
+                _ => {}
+            } (labels, ip + 1)
+        }).0
     }
 
     fn process_labels(program: &Program) -> Labels {
-        program
-            .iter()
-            .fold((Labels::new(), 0), |(mut labels, ip), inst| {
-                match inst {
-                    Inst::LABEL(label) => {
-                        labels.insert(label.to_owned(), ip);
-                    }
-                    _ => {}
-                }
-                (labels, ip + 1)
-            })
-            .0
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
+            match inst {
+                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
+                _ => {}
+            } (labels, ip + 1)
+        }).0
     }
 
     pub fn new_slice(program: &[Inst]) -> Mm {
@@ -136,10 +145,7 @@ impl Mm {
 
         let prelast = self.stack.last_mut().unwrap();
         let Some(b) = last.get_f64() else {
-            return Err(Trap::DivisionOfDifferentTypes(
-                prelast.get_type(),
-                last.get_type(),
-            ));
+            return Err(Trap::DivisionOfDifferentTypes(prelast.get_type(), last.get_type()))
         };
 
         use Inst::*;
@@ -159,22 +165,19 @@ impl Mm {
 
         let prelast = self.stack.last_mut().unwrap();
         let (Some(a), Some(b)) = (prelast.get_u64(), last.get_u64()) else {
-            return Err(Trap::DivisionOfDifferentTypes(
-                prelast.get_type(),
-                last.get_type(),
-            ));
+            return Err(Trap::DivisionOfDifferentTypes(prelast.get_type(), last.get_type()))
         };
 
         use Inst::*;
         match inst {
-            IADD => { *prelast = NaNBox::from_u64(a + b); }
-            ISUB => { *prelast = NaNBox::from_u64(a - b); }
-            IMUL => { *prelast = NaNBox::from_u64(a * b); }
+            IADD => { *prelast = Word::from_u64(a + b); }
+            ISUB => { *prelast = Word::from_u64(a - b); }
+            IMUL => { *prelast = Word::from_u64(a * b); }
             IDIV => {
                 if b != 0 {
-                    *prelast = NaNBox::from_u64(a / b);
+                    *prelast = Word::from_u64(a / b);
                 } else {
-                    return Err(Trap::DivisionByZero(inst));
+                    return Err(Trap::DivisionByZero(inst))
                 }
             }
             _ => unreachable!(),
@@ -190,7 +193,7 @@ impl Mm {
         if stack_len < 2 {
             eprintln!("ERROR: Not enough operands on the stack, needed: 2, have: {stack_len}");
             eprintln!("Last executed instruction: {inst:?}");
-            return Err(Trap::StackUnderflow(inst));
+            return Err(Trap::StackUnderflow(inst))
         }
 
         let last = if pop {
@@ -224,20 +227,14 @@ impl Mm {
     fn jump_if_flag(&mut self, label: &str, flag: Flag) -> Result<(), Trap> {
         let program_len = self.program.len();
         let Some(ip) = self.labels.get(&label.to_owned()) else {
-            return Err(Trap::InvalidLabel(
-                label.to_owned(),
-                "Not found in label map".to_owned(),
-            ));
+            return Err(Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned()))
         };
 
         if *ip >= program_len {
             eprintln!(
                 "ERROR: operand `{ip}` is outside of program bounds, program len: {program_len}"
             );
-            return Err(Trap::InvalidLabel(
-                label.to_owned(),
-                "Out of bounds".to_owned(),
-            ));
+            return Err(Trap::InvalidLabel(label.to_owned(), "Out of bounds".to_owned()))
         }
 
         if self.flags.is(flag) {
@@ -249,13 +246,9 @@ impl Mm {
         Ok(())
     }
 
-    pub fn execute(&mut self) -> Result<(), Trap> {
-        if self.ip >= self.program.len() {
-            self.halt = true;
-            return Ok(());
-        }
-
+    fn execute_instruction(&mut self) -> Result<(), Trap> {
         let inst = self.program[self.ip].to_owned();
+
         if DEBUG {
             println!("{ip}: {inst}", ip = self.ip);
         }
@@ -344,16 +337,13 @@ impl Mm {
             }
 
             JE(ref label) | JL(ref label) | JG(ref label) | JNGE(ref label) | JNE(ref label)
-            | JNLE(ref label) | JZ(ref label) | JNZ(ref label) => {
-                self.jump_if_flag(label, Flag::try_from(&inst).unwrap())
-            }
+                | JNLE(ref label) | JZ(ref label) | JNZ(ref label) => {
+                    self.jump_if_flag(label, Flag::try_from(&inst).unwrap())
+                }
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
-                    return Err(Trap::InvalidLabel(
-                        label,
-                        "Not found in label map".to_owned(),
-                    ));
+                    return Err(Trap::InvalidLabel(label, "Not found in label map".to_owned()))
                 };
 
                 if *ip < self.program.len() {
@@ -377,13 +367,27 @@ impl Mm {
                 if let Some(first) = self.stack.first() {
                     if self.stack.len() < Mm::STACK_CAP {
                         self.stack.push(*first);
+                        self.ip += 1;
                         Ok(())
                     } else {
-                        return Err(Trap::StackOverflow(inst));
+                        return Err(Trap::StackOverflow(inst))
                     }
                 } else {
-                    return Err(Trap::StackUnderflow(inst));
+                    return Err(Trap::StackUnderflow(inst))
                 }
+            }
+
+            DMP(stream) => if let Some(last) = self.stack.last() {
+                match stream {
+                    1 => print_oper_s(std::io::stdout(), last).unwrap(),
+                    2 => print_oper_s(std::io::stderr(), last).unwrap(),
+                    _ => return Err(Trap::InvalidOperand(InstString(inst.to_string(), Some(stream.to_string()))))
+                }
+                self.ip += 1;
+                println!();
+                Ok(())
+            } else {
+                return Err(Trap::StackUnderflow(inst))
             }
 
             HALT => {
@@ -391,6 +395,22 @@ impl Mm {
                 Ok(())
             }
         }
+    }
+
+    pub fn execute_program(&mut self, debug: bool, limit: Option::<usize>) -> Result<(), Trap> {
+        let mut count = 0;
+        let limit = limit.unwrap_or(usize::MAX);
+        while !self.halt() && count < limit {
+            self.execute_instruction()?;
+
+            if debug {
+                println!("{self}");
+            }
+
+            count += 1;
+        }
+
+        Ok(())
     }
 
     pub fn to_binary(&self, file_path: &str) -> std::io::Result<()> {
@@ -407,20 +427,16 @@ impl Mm {
     pub fn from_binary(file_path: &str) -> MResult<Mm> {
         use std::fs::read;
 
-        let buf = read(file_path)
-            .map_err(|err| {
-                eprintln!("Failed to read file: {file_path}: {err}");
-                err
-            })
-            .unwrap();
+        let buf = read(file_path).map_err(|err| {
+            eprintln!("Failed to read file: {file_path}: {err}");
+            err
+        }).unwrap();
 
         let (mut i, mut ip, mut program, mut labels) = (0, 0, Program::new(), Labels::new());
         while i < buf.len() {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst {
-                Inst::LABEL(ref label) => {
-                    labels.insert(label.to_owned(), ip);
-                }
+                Inst::LABEL(ref label) => { labels.insert(label.to_owned(), ip); }
                 _ => {}
             };
             ip += 1;
@@ -458,6 +474,13 @@ impl Mm {
 }
 
 /* TODO:
-    Use lifetimes to get rid of cloning values instead of taking reference
-    Introduce MasmTranslator struct, that translates masm and report errors proper way.
+    (#5) Introduce functions.
+
+    Something like that:
+    ```
+    fn func:
+    ```
+
+    1. Use lifetimes to get rid of cloning values instead of taking reference.
+    2. Introduce MasmTranslator struct, that translates masm and report errors proper way.
 */

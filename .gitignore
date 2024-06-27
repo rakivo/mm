@@ -4,3 +4,4 @@ Cargo.toml
 Cargo.lock
 generated.masm
 *.bin
+*.asm

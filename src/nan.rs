@@ -10,8 +10,27 @@ pub enum Type {
     Ptr,
 }
 
-#[derive(Copy, Debug, Clone, PartialEq)]
+#[derive(Copy, Debug, Clone)]
 pub struct NaNBox(pub f64);
+
+impl PartialEq for NaNBox {
+    fn eq(&self, b: &Self) -> bool {
+        let (Ok(typea), Ok(typeb)) = (self.get_type(), b.get_type()) else {
+            return false
+        };
+
+        if typea != typeb {
+            return false
+        }
+
+        match typea {
+            Type::F64 => self == b,
+            Type::I64 => self.as_i64() == b.as_i64(),
+            Type::U64 => self.as_u64() == b.as_u64(),
+            Type::Ptr => self.as_ptr() == b.as_ptr()
+        }
+    }
+}
 
 impl std::fmt::Display for NaNBox {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -30,7 +49,7 @@ impl NaNBox {
             Type::F64 => 1,
             Type::I64 => 2,
             Type::U64 => 3,
-            Type::Ptr => 4,
+            Type::Ptr => 4
         };
         let mut bits = x.to_bits();
         bits = (bits & !TYPE_MASK) | (((TYPE_MASK >> 48) & type_val) << 48);
@@ -136,6 +155,15 @@ impl NaNBox {
     pub fn get_f64(&self) -> Option::<f64> {
         if self.is_f64() {
             Some(self.as_f64())
+        } else {
+            None
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_i64(&self) -> Option::<i64> {
+        if self.is_i64() {
+            Some(self.as_i64())
         } else {
             None
         }

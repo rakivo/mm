@@ -1,4 +1,4 @@
-use crate::{NaNBox, Word, Trap, InstString};
+use crate::{NaNBox, Word, Trap, InstString, print_oper_f};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Inst {
@@ -34,6 +34,7 @@ pub enum Inst {
     LABEL(String),
 
     BOT,
+    DMP(u8),
 
     HALT,
 }
@@ -76,23 +77,15 @@ fn string_from_bytes(bytes: &[u8], n: usize) -> String {
 
 macro_rules! inst_from_bytes {
     (i.$b: ident, $ret: tt) => {{
-        if $b.len() >= 9 {
+        if $b.len() == 9 {
             let a = word_from_bytes(&$b);
             Ok((Inst::$ret(a), 9))
         } else {
             Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
         }
     }};
-    (f.$b: ident, $ret: tt) => {{
-        if $b.len() >= 9 {
-            let a = f64_from_bytes(&$b);
-            Ok((Inst::$ret(a), 9))
-        } else {
-            Err(Trap::InvalidOperand(InstString(stringify!($ret).to_owned(), None)))
-        }
-    }};
-    ($b:ident, $ret:tt) => {{
-        if $b.len() >= 9 {
+    ($b: ident, $ret: tt) => {{
+        if $b.len() == 9 {
             let str_len = word_from_bytes(&$b).0 as usize;
             if $b.len() >= 9 + str_len {
                 let a = string_from_bytes(&$b, str_len);
@@ -107,6 +100,11 @@ macro_rules! inst_from_bytes {
 }
 
 impl Inst {
+    #[inline(always)]
+    fn slice_from_vec(fixed: Vec::<u8>) -> &'static [u8] {
+        unsafe { std::slice::from_raw_parts(fixed.as_ptr(), fixed.len()) }
+    }
+
     pub fn as_bytes(&self) -> &[u8] {
         use Inst::*;
         match self {
@@ -139,6 +137,7 @@ impl Inst {
             FSUB        => &[24],
             FMUL        => &[25],
             FDIV        => &[26],
+            DMP(stream) => Self::slice_from_vec(vec![27, *stream]),
             HALT        => &[69],
         }
     }
@@ -168,12 +167,24 @@ impl Inst {
             Some(19) => inst_from_bytes!(bytes, JNZ),
             Some(20) => inst_from_bytes!(bytes, JMP),
             Some(21) => inst_from_bytes!(bytes, LABEL),
+
             Some(22) => Ok((BOT, 1)),
 
             Some(23) => Ok((FADD, 1)),
             Some(24) => Ok((FSUB, 1)),
             Some(25) => Ok((FMUL, 1)),
             Some(26) => Ok((FDIV, 1)),
+
+            Some(27) => {
+                println!("{bytes:?}");
+                let inst = DMP(if bytes.len() == 2 {
+                    bytes[1]
+                } else {
+                    return Err(Trap::InvalidOperand(InstString("DMP".to_owned(), None)))
+                });
+
+                Ok((inst, 2))
+            }
 
             Some(69) => Ok((HALT, 1)),
             _        => Err(Trap::IllegalInstruction(Some(String::from_utf8_lossy(bytes).to_string()))),
@@ -213,6 +224,11 @@ impl TryFrom<&str> for Inst {
                     .map(NaNBox::from_u64)
                     .map_err(|_| oper_err.to_owned())
             }
+        };
+
+        let parse_u8 = || -> Result<u8, Self::Error> {
+            let u8_ = oper.to_owned().ok_or(oper_err.to_owned())?;
+            u8_.parse::<u8>().map_err(|_| oper_err.to_owned())
         };
 
         let get_oper = || -> Result::<String, Self::Error> {
@@ -263,6 +279,7 @@ impl TryFrom<&str> for Inst {
                 }
             }
             "bot" => Ok(BOT),
+            "dmp" => Ok(DMP(parse_u8()?)),
             _ => Err(inst_err)
         }
     }
@@ -299,18 +316,10 @@ impl From<&Inst> for String {
             JMP(oper)   => format!("    jmp     {oper}"),
             LABEL(oper) => format!("{oper}:"),
             BOT         => format!("    bot"),
+            DMP(oper)   => format!("    dmp     {oper}"),
             HALT        => format!("    halt"),
         }
     }
-}
-
-#[inline]
-fn print_oper(f: &mut std::fmt::Formatter<'_>, oper: &Word) -> std::fmt::Result {
-    if oper.is_u64() {
-        write!(f, "`{f}`", f = oper.as_u64())
-    } else if oper.is_f64() {
-        write!(f, "`{oper}`")
-    } else { todo!() }
 }
 
 impl std::fmt::Display for Inst {
@@ -318,7 +327,7 @@ impl std::fmt::Display for Inst {
         use Inst::*;
         match self {
             NOP         => write!(f, "Instruction: `NOP`"),
-            PUSH(oper)  => { write!(f, "Instruction: `PUSH`, operand: ")?; print_oper(f, oper) }
+            PUSH(oper)  => { write!(f, "Instruction: `PUSH`, operand: ")?; print_oper_f(f, oper) }
             POP         => write!(f, "Instruction: `POP`"),
             INC         => write!(f, "Instruction: `INC`"),
             DEC         => write!(f, "Instruction: `DEC`"),
@@ -333,9 +342,9 @@ impl std::fmt::Display for Inst {
             FMUL        => write!(f, "Instruction: `FMUL`"),
             FDIV        => write!(f, "Instruction: `FDIV`"),
 
-            CMP(oper)   => { write!(f, "Instruction: `CMP`, operand: ")?; print_oper(f, oper) }
+            CMP(oper)   => { write!(f, "Instruction: `CMP`, operand: ")?; print_oper_f(f, oper) }
             SWAP        => write!(f, "Instruction: `SWAP`"),
-            DUP(oper)   => { write!(f, "Instruction: `DUP`, operand: ")?; print_oper(f, oper) }
+            DUP(oper)   => { write!(f, "Instruction: `DUP`, operand: ")?; print_oper_f(f, oper) }
             JE(oper)    => write!(f, "Instruction: `JE`, operand: `{oper}`"),
             JL(oper)    => write!(f, "Instruction: `JL`, operand: `{oper}`"),
             JNGE(oper)  => write!(f, "Instruction: `JNGE`, operand: `{oper}`"),
@@ -347,6 +356,7 @@ impl std::fmt::Display for Inst {
             JMP(oper)   => write!(f, "Instruction: `JMP`, operand: `{oper}`"),
             LABEL(oper) => write!(f, "Instruction: `LABEL`, operand: `{oper}`"),
             BOT         => write!(f, "Instruction: `BOT`"),
+            DMP(oper)   => write!(f, "Instruction: `DMP`, operand: {oper}"),
             HALT        => write!(f, "Instruction: `HALT`"),
         }
     }

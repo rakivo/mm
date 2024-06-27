@@ -12,11 +12,6 @@ fn main() -> std::io::Result<()> {
 
     let input_file_path = &args[1];
     let mut mm = Mm::try_from_masm(&input_file_path).unwrap_or_report();
-    while !mm.halt() {
-        mm.execute().unwrap_or_report();
-    }
-
-    println!("{mm}");
-
+    mm.execute_program(false, None).unwrap_or_report();
     Ok(())
 }

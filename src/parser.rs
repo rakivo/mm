@@ -1,10 +1,10 @@
 use std::process::exit;
-use crate::{Mm, Inst, Trap, MResult, Labels, Flags, DEBUG};
+use crate::{Mm, Inst, Trap, MResult, Labels, Flags, DEBUG, ENTRY_POINT_LABEL};
 
 #[derive(Debug)]
 pub struct Info<'a>(&'a str, usize);
 
-pub struct MTrap<'a>(Trap, Info<'a>);
+pub struct MTrap<'a>(Trap, Option::<Info<'a>>);
 
 pub type MProgram = Vec::<(Inst, usize)>;
 pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
@@ -13,8 +13,12 @@ pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
 impl std::fmt::Debug for MTrap<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (trap, info) = (&self.0, &self.1);
-        let (file_path, row) = (info.0, info.1 + 1);
-        write!(f, "{file_path}:{row}: {trap:?}")
+        if let Some(info) = info {
+            let (file_path, row) = (info.0, info.1 + 1);
+            write!(f, "{file_path}:{row}: {trap:?}")
+        } else {
+            write!(f, "{trap:?}")
+        }
     }
 }
 
@@ -36,7 +40,7 @@ fn parse_line(line: &str, program: &mut MProgram, row: usize, file_path: &str) -
         parse_labels(&line[..line.len() - 1], program, row, file_path)
     } else {
         program.push((Inst::try_from(line).map_err(|err| {
-            MTrap(err, Info(file_path, row))
+            MTrap(err, Some(Info(file_path, row)))
         }).unwrap_or_report(), row));
 
         Ok(())
@@ -60,7 +64,7 @@ fn comptime_jumps_check<'a>(program: &MProgram, labels: &Labels, file_path: &'a 
                 if !labels.contains_key(label) {
                     let trap = Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned());
                     let info = Info(file_path, *row);
-                    return Err(MTrap(trap, info))
+                    return Err(MTrap(trap, Some(info)))
                 }
             }
             _ => {}
@@ -97,6 +101,11 @@ impl Mm {
             println!("{program:?}");
         }
 
+        let Some(entry_label) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT_LABEL) else {
+            let trap = Trap::NoEntryPointFound(file_path.to_owned());
+            return Err(MTrap(trap, None))
+        };
+
         comptime_jumps_check(&program, &labels, file_path).unwrap_or_report();
 
         let mm = Mm {
@@ -104,7 +113,7 @@ impl Mm {
             labels,
             flags: Flags::new(),
             program: program.into_iter().map(|x| x.0).collect(),
-            ip: 0,
+            ip: entry_label.1,
             halt: false
         };
 

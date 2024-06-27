@@ -38,20 +38,14 @@ test_examples: mm examples $(BINARIES)
 	$(foreach src,$(EXAMPLES_SRC),$(TRANSLATE) $(src);)
 
 mm: $(BUILD_DIR)/libmm.rlib
-$(BUILD_DIR)/libmm.rlib: src/mm.rs src/flag.rs src/inst.rs src/trap.rs src/regs.rs src/word.rs src/parser.rs
+$(BUILD_DIR)/libmm.rlib: src/mm.rs src/flag.rs src/inst.rs src/trap.rs src/regs.rs src/nan.rs src/parser.rs
 	rustc $(RUST_FLAGS) $(LIB_FLAGS) -o $@ $<
 
 $(BUILD_DIR)/from_binary: mm examples/from_binary.rs
 	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/from_binary.rs
 
-$(BUILD_DIR)/to_binary: mm examples/to_binary.rs
-	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/to_binary.rs
-
 $(BUILD_DIR)/translate_masm: mm examples/translate_masm.rs
 	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/translate_masm.rs
-
-$(BUILD_DIR)/gen_masm: mm examples/gen_masm.rs
-	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/gen_masm.rs
 
 $(BUILD_DIR)/gen_from_bin: mm examples/gen_from_bin.rs
 	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/gen_from_bin.rs
