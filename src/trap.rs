@@ -1,4 +1,4 @@
-use crate::Inst;
+use crate::{Inst, Type};
 
 #[derive(Clone)]
 pub struct InstString(pub String, pub Option::<String>);
@@ -11,7 +11,8 @@ pub enum Trap {
     InvalidOperand(InstString),
     InvalidLabel(String, String),
     IllegalInstruction(Option::<String>),
-    IllegalInstructionAccess
+    IllegalInstructionAccess,
+    DivisionOfDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
 }
 
 impl std::fmt::Display for InstString {
@@ -29,17 +30,18 @@ impl std::fmt::Debug for Trap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Trap::*;
         match self {
-            StackOverflow(inst)          => write!(f, "Stack overflow, Last executed {inst}"),
-            StackUnderflow(inst)         => write!(f, "Stack underflow, Last executed {inst}"),
-            DivisionByZero(inst)         => write!(f, "Division by zero, Last executed {inst}"),
-            InvalidOperand(inst)         => write!(f, "Invalid operand, Last executed {inst}"),
-            InvalidLabel(label, reason)  => write!(f, "Invalid label: `{label}`: {reason}"),
-            IllegalInstruction(inst_opt) => if let Some(inst) = inst_opt {
+            StackOverflow(inst)                => write!(f, "Stack overflow, Last executed {inst}"),
+            StackUnderflow(inst)               => write!(f, "Stack underflow, Last executed {inst}"),
+            DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst}"),
+            InvalidOperand(inst)               => write!(f, "Invalid operand, Last executed {inst}"),
+            InvalidLabel(label, reason)        => write!(f, "Invalid label: `{label}`: {reason}"),
+            IllegalInstruction(inst_opt)       => if let Some(inst) = inst_opt {
                 write!(f, "Illegal instruction: {inst}")
             } else {
                 write!(f, "Illegal instruction")
             }
-            IllegalInstructionAccess     => write!(f, "Illegal instruction access"),
+            IllegalInstructionAccess           => write!(f, "Illegal instruction access"),
+            DivisionOfDifferentTypes(ty1, ty2) => write!(f, "Can't divide different types, type 1: {ty1:?}, type 2: {ty2:?}")
         }
     }
 }

@@ -86,12 +86,8 @@ impl Mm {
             parse_line(&line, &mut program, row, file_path).unwrap_or_report();
         }
 
-
-        if let Some(last) = program.last() {
-            match last.0 {
-                Inst::HALT => {},
-                _ => program.push((Inst::HALT, program.last().unwrap().1 + 1))
-            }
+        if matches!(program.last(), Some(last) if last.0 != Inst::HALT) {
+            program.push((Inst::HALT, program.last().unwrap().1 + 1));
         }
 
         let labels = Mm::process_labels_m(&program);

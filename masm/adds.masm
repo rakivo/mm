@@ -1,0 +1,19 @@
+faddin:
+    push 34.5
+    push 34.5
+    fadd
+
+fsubbin:
+    push 530.55
+    push 110.55
+    fsub
+
+iadding:
+    push 113
+    push 307
+    iadd
+
+isubbin:
+    push 213
+    push 144
+    isub
