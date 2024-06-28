@@ -13,6 +13,6 @@ fn main() -> std::io::Result<()> {
     let input_path = &args[1];
     let output_path = &args[2];
 
-    let mm = Mm::from_binary(input_path).unwrap();
+    let mm = Mm::from_binary(input_path).unwrap_or_report();
     mm.generate_masm(output_path)
 }

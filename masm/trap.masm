@@ -1,0 +1,6 @@
+; Comments
+
+_start ::
+    push 35
+    push 34
+    call _start

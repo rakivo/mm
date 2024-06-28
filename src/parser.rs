@@ -3,22 +3,16 @@ use std::{
     collections::VecDeque,
     time::{SystemTime, UNIX_EPOCH, Duration}
 };
-use crate::{Mm, Inst, Trap, MResult, Labels, Flags, Funcs, DEBUG, ENTRY_POINT_FUNCTION};
+use crate::{Mm, Inst, MTrap, Trap, MResult, Program, Labels, Flags, Funcs, DEBUG, ENTRY_POINT_FUNCTION};
 
-#[derive(Debug)]
-pub struct Info<'a>(&'a str, usize);
-
-pub struct MTrap<'a>(Trap, Option::<Info<'a>>);
-
-pub type MProgram = Vec::<(Inst, usize)>;
-pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
+pub type MMResult<T> = std::result::Result::<T, MTrap>;
 
 // Adding 1 to the row to convert it from 0-based indexing
-impl std::fmt::Debug for MTrap<'_> {
+impl std::fmt::Debug for MTrap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (trap, info) = (&self.0, &self.1);
         if let Some(info) = info {
-            let (file_path, row) = (info.0, info.1 + 1);
+            let (file_path, row) = (info.0.to_owned(), info.1 + 1);
             write!(f, "{file_path}:{row}: {trap:?}")
         } else {
             write!(f, "{trap:?}")
@@ -46,7 +40,7 @@ pub fn time_msg(msg: &str) {
     }
 }
 
-fn parse_labels(line: &str, program: &mut MProgram, row: usize, _file_path: &str) -> MResult::<()> {
+fn parse_labels(line: &str, program: &mut Program, row: usize, _file_path: &str) -> MResult::<()> {
 // label1, label2:
 //     ...
 
@@ -62,7 +56,7 @@ fn parse_labels(line: &str, program: &mut MProgram, row: usize, _file_path: &str
     Ok(())
 }
 
-fn parse_function(line: &str, program: &mut MProgram, row: usize, _file_path: &str) -> MResult::<()> {
+fn parse_function(line: &str, program: &mut Program, row: usize, _file_path: &str) -> MResult::<()> {
 // func ::
 //     ...
 
@@ -78,7 +72,7 @@ fn parse_function(line: &str, program: &mut MProgram, row: usize, _file_path: &s
     Ok(())
 }
 
-fn parse_line(line: &str, program: &mut MProgram, row: usize, file_path: &str) -> MResult::<()> {
+fn parse_line(line: &str, program: &mut Program, row: usize, file_path: &str) -> MResult::<()> {
     let first = line.chars().next();
     let matches = matches!(&first, Some(ch) if ch.is_ascii());
 
@@ -90,7 +84,7 @@ fn parse_line(line: &str, program: &mut MProgram, row: usize, file_path: &str) -
         parse_labels(&line, program, row, file_path)
     } else {
         let inst = Inst::try_from(line).map_err(|err| {
-            MTrap(err, Some(Info(file_path, row)))
+            MTrap(err, Some((file_path.to_owned(), row)))
         }).unwrap_or_report();
 
         program.push((inst, row));
@@ -99,7 +93,7 @@ fn parse_line(line: &str, program: &mut MProgram, row: usize, file_path: &str) -
     }
 }
 
-fn comptime_jfs_check<'a>(program: &MProgram, labels: &Labels, funcs: &Funcs, file_path: &'a str) -> MMResult::<'a, ()> {
+fn comptime_jfs_check<'a>(program: &Program, labels: &Labels, funcs: &Funcs, file_path: &'a str) -> MMResult::<()> {
     use Inst::*;
     for (inst, row) in program.iter() {
         match inst {
@@ -115,15 +109,13 @@ fn comptime_jfs_check<'a>(program: &MProgram, labels: &Labels, funcs: &Funcs, fi
             {
                 if !labels.contains_key(label) {
                     let trap = Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned());
-                    let info = Info(file_path, *row);
-                    return Err(MTrap(trap, Some(info)))
+                    return Err(MTrap(trap, Some((file_path.to_owned(), *row))))
                 }
             }
             CALL(ref func) => {
                 if !funcs.contains_key(func) {
                     let trap = Trap::InvalidFunction(func.to_owned(), "Not found in function map".to_owned());
-                    let info = Info(file_path, *row);
-                    return Err(MTrap(trap, Some(info)))
+                    return Err(MTrap(trap, Some((file_path.to_owned(), *row))))
                 }
             }
             _ => {}
@@ -147,7 +139,7 @@ impl Mm {
             time_msg("Started parsing");
         }
 
-        let mut program = MProgram::new();
+        let mut program = Program::new();
         for (row, line) in file.lines().enumerate() {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with(';') { continue }
@@ -158,8 +150,8 @@ impl Mm {
             program.push((Inst::HALT, program.last().unwrap().1 + 1));
         }
 
-        let funcs = Mm::process_funcs_m(&program);
-        let labels = Mm::process_labels_m(&program);
+        let funcs = Mm::process_funcs(&program);
+        let labels = Mm::process_labels(&program);
 
         let Some(entry_function) = funcs.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT_FUNCTION) else {
             let trap = Trap::NoEntryPointFound(file_path.to_owned());
@@ -173,12 +165,13 @@ impl Mm {
         }
 
         let mm = Mm {
+            file_path: file_path.to_owned(),
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
             call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
             funcs,
             labels,
             flags: Flags::new(),
-            program: program.into_iter().map(|x| x.0).collect(),
+            program,
             ip: entry_function.1,
             halt: false
         };

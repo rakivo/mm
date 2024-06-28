@@ -1,0 +1,8 @@
+#SYS_WRITE 1
+
+#write n1 n2 inst {
+    push n1
+    push n2
+    inst
+    dmp 1
+}

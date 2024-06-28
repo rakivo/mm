@@ -1,10 +1,6 @@
 use crate::{Inst, Type};
 
 #[derive(Clone)]
-// Inst, operand
-pub struct InstString(pub String, pub Option::<String>);
-
-#[derive(Clone)]
 pub enum Trap {
     StackOverflow(Inst),
     StackUnderflow(Inst),
@@ -13,22 +9,11 @@ pub enum Trap {
     DivisionByZero(Inst),
     IllegalInstructionAccess,
     NoEntryPointFound(String),
-    InvalidOperand(InstString),
+    InvalidOperand(String, Option::<String>),
     InvalidLabel(String, String),
     InvalidFunction(String, String),
     IllegalInstruction(Option::<String>),
     DivisionOfDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
-}
-
-impl std::fmt::Display for InstString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ref inst = self.0;
-        if let Some(ref oper) = self.1 {
-            write!(f, "Instruction: {inst}, operand: {oper}")
-        } else {
-            write!(f, "Instruction: {inst}")
-        }
-    }
 }
 
 impl std::fmt::Debug for Trap {
@@ -40,7 +25,9 @@ impl std::fmt::Debug for Trap {
             CallStackOverflow(inst)            => write!(f, "Call stack overflow, Last executed {inst}"),
             CallStackUnderflow(inst)           => write!(f, "Call stack underflow, Last executed {inst}"),
             DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst}"),
-            InvalidOperand(inst)               => write!(f, "Invalid operand, Last executed {inst}"),
+            InvalidOperand(inst, oper)         => if let Some(oper) = oper {
+                write!(f, "Invalid operand, Last executed instruction: {inst}, {oper}")
+            } else { write!(f, "Invalid operand, Last executed instruction: {inst}") }
             InvalidLabel(label, reason)        => write!(f, "Invalid label: `{label}`: {reason}"),
             InvalidFunction(func, reason)      => write!(f, "Invalid function: `{func}`: {reason}"),
             IllegalInstruction(inst_opt)       => if let Some(inst) = inst_opt {
@@ -50,5 +37,16 @@ impl std::fmt::Debug for Trap {
             IllegalInstructionAccess           => write!(f, "Illegal instruction access"),
             DivisionOfDifferentTypes(ty1, ty2) => write!(f, "Can't divide different types, type 1: {ty1:?}, type 2: {ty2:?}")
         }
+    }
+}
+
+pub struct MTrap(pub Trap, pub Option::<(String, usize)>);
+
+impl From::<(&str, usize, Trap)> for MTrap {
+    fn from(t: (&str, usize, Trap)) -> Self {
+        let file_path = t.0;
+        let row = t.1;
+        let trap = t.2;
+        MTrap(trap, Some((file_path.to_owned(), row)))
     }
 }

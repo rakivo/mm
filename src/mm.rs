@@ -19,11 +19,14 @@ const ENTRY_POINT_FUNCTION: &str = "_start";
 pub type Word = NaNBox;
 pub type MResult<T> = std::result::Result<T, Trap>;
 
-pub type Program = Vec<Inst>;
+pub type Program = Vec<(Inst, usize)>;
+
 pub type Funcs = std::collections::HashMap<String, usize>;
 pub type Labels = std::collections::HashMap<String, usize>;
 
 pub struct Mm {
+    pub file_path: String,
+
     stack: VecDeque::<Word>,
     call_stack: VecDeque::<usize>,
 
@@ -94,68 +97,29 @@ impl Mm {
     const STACK_CAP: usize = 8 * 1024;
     const CALL_STACK_CAP: usize = 8 * 128;
 
-    fn process_func(inst: &Inst, funcs: &mut Funcs, ip: usize) {
-        match inst {
-            Inst::FUNC(func) => { funcs.insert(func.to_owned(), ip); }
-            _ => {}
-        }
-    }
-
-    fn process_label(inst: &Inst, labels: &mut Labels, ip: usize) {
-        match inst {
-            Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
-            _ => {}
-        }
-    }
-
-    #[inline]
-    fn process_funcs_m(program: &MProgram) -> Funcs {
-        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), (inst, _)| {
-            Self::process_func(inst, &mut funcs, ip);
-            (funcs, ip + 1)
-        }).0
-    }
-
-    #[inline]
     fn process_funcs(program: &Program) -> Funcs {
-        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), inst| {
-            Self::process_func(inst, &mut funcs, ip);
+        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), (inst, _)| {
+            match inst {
+                Inst::FUNC(func) => { funcs.insert(func.to_owned(), ip); }
+                _ => {}
+            }
             (funcs, ip + 1)
         }).0
     }
 
-    #[inline]
-    fn process_labels_m(program: &MProgram) -> Labels {
-        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (inst, _)| {
-            Self::process_label(inst, &mut labels, ip);
-            (labels, ip + 1)
-        }).0
-    }
-
-    #[inline]
     fn process_labels(program: &Program) -> Labels {
-        program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
-            Self::process_label(inst, &mut labels, ip);
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (inst, _)| {
+            match inst {
+                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
+                _ => {}
+            }
             (labels, ip + 1)
         }).0
     }
 
-    pub fn new_slice(program: &[Inst]) -> Mm {
-        let program = program.to_vec();
+    pub fn new(program: Program, file_path: &str) -> Mm {
         Mm {
-            stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
-            funcs: Self::process_funcs(&program),
-            labels: Self::process_labels(&program),
-            flags: Flags::new(),
-            program,
-            ip: 0,
-            halt: false,
-        }
-    }
-
-    pub fn new(program: Program) -> Mm {
-        Mm {
+            file_path: file_path.to_owned(),
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
             call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
             funcs: Self::process_funcs(&program),
@@ -276,9 +240,7 @@ impl Mm {
         Ok(())
     }
 
-    fn execute_instruction(&mut self) -> Result<(), Trap> {
-        let inst = self.program[self.ip].to_owned();
-
+    fn execute_instruction(&mut self, inst: Inst) -> Result<(), Trap> {
         if DEBUG {
             println!("{ip}: {inst}", ip = self.ip);
         }
@@ -408,7 +370,7 @@ impl Mm {
                 match stream {
                     1 => print_oper_s(std::io::stdout(), last).unwrap(),
                     2 => print_oper_s(std::io::stderr(), last).unwrap(),
-                    _ => return Err(Trap::InvalidOperand(InstString(inst.to_string(), Some(stream.to_string()))))
+                    _ => return Err(Trap::InvalidOperand(inst.to_string(), Some(stream.to_string())))
                 }
                 self.ip += 1;
                 println!();
@@ -455,7 +417,7 @@ impl Mm {
         }
     }
 
-    pub fn execute_program(&mut self, debug: bool, limit: Option::<usize>) -> Result<(), Trap> {
+    pub fn execute_program(&mut self, debug: bool, limit: Option::<usize>) -> MMResult<()> {
         if DEBUG {
             time_msg("Started executing program");
         }
@@ -463,7 +425,10 @@ impl Mm {
         let mut count = 0;
         let limit = limit.unwrap_or(usize::MAX);
         while !self.halt() && count < limit {
-            self.execute_instruction()?;
+            let (inst, row) = self.program[self.ip].to_owned();
+            self.execute_instruction(inst).map_err(|trap| {
+                MTrap::from((self.file_path.as_str(), row, trap))
+            })?;
 
             if debug {
                 println!("{self}");
@@ -483,7 +448,7 @@ impl Mm {
         use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
-        for inst in self.program.iter() {
+        for (inst, _) in self.program.iter() {
             f.write_all(&inst.as_bytes())?;
         }
 
@@ -506,16 +471,17 @@ impl Mm {
                 Inst::FUNC(ref func) => { funcs.insert(func.to_owned(), ip); }
                 _ => {}
             };
-            program.push(inst);
+            program.push((inst, ip));
             ip += 1;
             i += size;
         }
 
-        if matches!(program.last(), Some(last) if *last != Inst::HALT) {
-            program.push(Inst::HALT);
+        if matches!(program.last(), Some(last) if last.0 != Inst::HALT) {
+            program.push((Inst::HALT, ip + 1));
         }
 
         let mm = Mm {
+            file_path: file_path.to_owned(),
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
             call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
             funcs,
@@ -534,7 +500,7 @@ impl Mm {
 
         let mut f = File::create(file_path)?;
         for inst in self.program.iter() {
-            let inst_str = format!("{inst}\n", inst = String::from(inst));
+            let inst_str = format!("{inst}\n", inst = String::from(&inst.0));
             f.write_all(&inst_str.as_bytes())?;
         }
 
