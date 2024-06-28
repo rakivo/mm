@@ -30,38 +30,23 @@ impl Flags {
         Flags([false; 8])
     }
 
+    fn if_c(&mut self, flag: Flag, c: bool) {
+        if c {
+            self.set(flag);
+        } else {
+            self.reset(flag);
+        }
+    }
+
     pub fn cmp(&mut self, a: &u64, b: &u64) {
-        if a == b {
-            self.set(Flag::E);
-            self.reset(Flag::NE);
-        } else {
-            self.reset(Flag::E);
-            self.set(Flag::NE);
-        }
-        if a < b {
-            self.set(Flag::L);
-            self.set(Flag::NGE);
-        } else {
-            self.reset(Flag::L);
-            self.reset(Flag::NGE);
-        }
-        if a > b {
-            self.set(Flag::G);
-            self.set(Flag::NLE);
-        } else {
-            self.reset(Flag::G);
-            self.reset(Flag::NLE);
-        }
-        if *a == 0 {
-            self.set(Flag::Z);
-        } else {
-            self.reset(Flag::Z);
-        }
-        if *a != 0 {
-            self.set(Flag::NZ);
-        } else {
-            self.reset(Flag::NZ);
-        }
+        self.if_c(Flag::E, a == b);
+        self.if_c(Flag::NE, a != b);
+        self.if_c(Flag::L, a < b);
+        self.if_c(Flag::NGE, a < b);
+        self.if_c(Flag::G, a > b);
+        self.if_c(Flag::NLE, a > b);
+        self.if_c(Flag::Z, *a == 0);
+        self.if_c(Flag::NZ, *a != 0);
     }
 
     #[inline]
