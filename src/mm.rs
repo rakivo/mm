@@ -12,16 +12,20 @@ pub use parser::*;
 
 const DEBUG: bool = false;
 
-const ENTRY_POINT_LABEL: &str = "_start";
+const ENTRY_POINT_FUNCTION: &str = "_start";
 
 pub type Word = NaNBox;
 pub type MResult<T> = std::result::Result<T, Trap>;
 
 pub type Program = Vec<Inst>;
 pub type Labels = std::collections::HashMap<String, usize>;
+pub type Funcs = std::collections::HashMap<String, usize>;
 
 pub struct Mm {
-    stack: Vec<Word>,
+    stack: Vec::<Word>,
+    call_stack: Vec::<usize>,
+
+    funcs: Funcs,
     labels: Labels,
     flags: Flags,
     program: Program,
@@ -30,33 +34,26 @@ pub struct Mm {
 }
 
 #[inline]
-fn print_oper(oper: &Word) {
-    if oper.is_u64() || oper.is_i64() {
-        print!("{f}", f = oper.as_i64())
-    } else if oper.is_f64() {
-        print!("{oper}")
-    } else { todo!() }
-}
-
-#[inline]
 fn print_oper_f(f: &mut std::fmt::Formatter<'_>, oper: &Word) -> std::fmt::Result {
-    if oper.is_u64() || oper.is_i64() {
-        write!(f, "{f}", f = oper.as_i64())
-    } else if oper.is_f64() {
-        write!(f, "{oper}")
-    } else { todo!() }
+    match oper.get_type().unwrap() {
+        Type::F64 => write!(f, "{f}", f = oper.as_f64()),
+        Type::I64 => write!(f, "{f}", f = oper.as_i64()),
+        Type::U64 => write!(f, "{f}", f = oper.as_u64()),
+        _ => todo!()
+    }
 }
 
 #[inline]
-fn print_oper_s<S>(mut f: S, oper: &Word) -> std::io::Result<()>
+fn print_oper_s<S>(mut s: S, oper: &Word) -> std::io::Result::<()>
 where
     S: std::io::Write
 {
-    if oper.is_u64() || oper.is_i64() {
-        write!(f, "{f}", f = oper.as_i64())
-    } else if oper.is_f64() {
-        write!(f, "{oper}")
-    } else { todo!() }
+    match oper.get_type().unwrap() {
+        Type::F64 => write!(s, "{f}", f = oper.as_f64()),
+        Type::I64 => write!(s, "{f}", f = oper.as_i64()),
+        Type::U64 => write!(s, "{f}", f = oper.as_u64()),
+        _ => todo!()
+    }
 }
 
 impl std::fmt::Debug for Mm {
@@ -67,7 +64,7 @@ impl std::fmt::Debug for Mm {
         while i < self.stack.len() {
             let oper = self.stack[i];
             write!(f, ", ")?;
-            print_oper(&oper);
+            print_oper_f(f, &oper)?;
             i += 1;
         }
         Ok(())
@@ -78,12 +75,12 @@ impl std::fmt::Display for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: ")?;
         if let Some(first) = self.stack.first() {
-            print_oper(&first);
+            print_oper_f(f, &first)?;
             let (mut i, n) = (1, self.stack.len());
             while i < n {
                 let oper = self.stack[i];
                 write!(f, ", ")?;
-                print_oper(&oper);
+                print_oper_f(f, &oper)?;
                 i += 1;
             }
         }
@@ -94,21 +91,45 @@ impl std::fmt::Display for Mm {
 impl Mm {
     const STACK_CAP: usize = 1024;
 
-    fn process_labels_m(program: &MProgram) -> Labels {
-        program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
-            match &inst.0 {
-                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
-                _ => {}
-            } (labels, ip + 1)
+    fn process_funcs_m(program: &MProgram) -> Funcs {
+        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), (inst, _)| {
+            Self::process_func(inst, &mut funcs, ip);
+            (funcs, ip + 1)
         }).0
+    }
+
+    fn process_func(inst: &Inst, funcs: &mut Funcs, ip: usize) {
+        match inst {
+            Inst::FUNC(func) => { funcs.insert(func.to_owned(), ip); }
+            _ => {}
+        }
+    }
+
+    fn process_funcs(program: &Program) -> Funcs {
+        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), inst| {
+            Self::process_func(inst, &mut funcs, ip);
+            (funcs, ip + 1)
+        }).0
+    }
+
+    fn process_labels_m(program: &MProgram) -> Labels {
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (inst, _)| {
+            Self::process_label(inst, &mut labels, ip);
+            (labels, ip + 1)
+        }).0
+    }
+
+    fn process_label(inst: &Inst, labels: &mut Labels, ip: usize) {
+        match inst {
+            Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
+            _ => {}
+        }
     }
 
     fn process_labels(program: &Program) -> Labels {
         program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
-            match inst {
-                Inst::LABEL(label) => { labels.insert(label.to_owned(), ip); }
-                _ => {}
-            } (labels, ip + 1)
+            Self::process_label(inst, &mut labels, ip);
+            (labels, ip + 1)
         }).0
     }
 
@@ -116,6 +137,8 @@ impl Mm {
         let program = program.to_vec();
         Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
+            call_stack: Vec::with_capacity(Mm::STACK_CAP),
+            funcs: Self::process_funcs(&program),
             labels: Self::process_labels(&program),
             flags: Flags::new(),
             program,
@@ -127,6 +150,8 @@ impl Mm {
     pub fn new(program: Program) -> Mm {
         Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
+            call_stack: Vec::with_capacity(Mm::STACK_CAP),
+            funcs: Self::process_funcs(&program),
             labels: Self::process_labels(&program),
             flags: Flags::new(),
             program,
@@ -336,14 +361,14 @@ impl Mm {
                 }
             }
 
-              JE(ref label)
-            | JL(ref label)
-            | JG(ref label)
-            | JNGE(ref label)
-            | JNE(ref label)
-            | JNLE(ref label)
-            | JZ(ref label)
-            | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
+            JE(ref label)
+                | JL(ref label)
+                | JG(ref label)
+                | JNGE(ref label)
+                | JNE(ref label)
+                | JNLE(ref label)
+                | JZ(ref label)
+                | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
@@ -362,10 +387,6 @@ impl Mm {
                 }
             }
 
-            LABEL(..) => {
-                self.ip += 1;
-                Ok(())
-            }
 
             BOT => {
                 if let Some(first) = self.stack.first() {
@@ -394,8 +415,35 @@ impl Mm {
                 return Err(Trap::StackUnderflow(inst))
             }
 
+            CALL(addr) => {
+                if self.program.len() > self.ip {
+                    self.call_stack.push(self.ip + 1);
+                }
+
+                if let Some(ip) = self.funcs.get(&addr) {
+                    self.ip = *ip;
+                    Ok(())
+                } else {
+                    return Err(Trap::InvalidFunction(addr.to_owned(), "Not found in function map".to_owned()))
+                }
+            }
+
+            RET => {
+                if let Some(ip) = self.call_stack.pop() {
+                    self.ip = ip;
+                    Ok(())
+                } else {
+                    panic!("Return address not found in stack")
+                }
+            }
+
             HALT => {
                 self.halt = true;
+                Ok(())
+            }
+
+            _ => {
+                self.ip += 1;
                 Ok(())
             }
         }
@@ -436,11 +484,12 @@ impl Mm {
             err
         }).unwrap();
 
-        let (mut i, mut ip, mut program, mut labels) = (0, 0, Program::new(), Labels::new());
+        let (mut i, mut ip, mut program, mut labels, mut funcs) = (0, 0, Program::new(), Labels::new(), Funcs::new());
         while i < buf.len() {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst {
                 Inst::LABEL(ref label) => { labels.insert(label.to_owned(), ip); }
+                Inst::FUNC(ref func) => { funcs.insert(func.to_owned(), ip); }
                 _ => {}
             };
             ip += 1;
@@ -454,6 +503,8 @@ impl Mm {
 
         let mm = Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
+            call_stack: Vec::with_capacity(Mm::STACK_CAP),
+            funcs,
             labels,
             flags: Flags::new(),
             program,

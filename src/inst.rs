@@ -36,6 +36,11 @@ pub enum Inst {
     BOT,
     DMP(u8),
 
+    FUNC(String),
+    CALL(String),
+
+    RET,
+
     HALT,
 }
 
@@ -101,7 +106,7 @@ macro_rules! inst_from_bytes {
 
 impl Inst {
     #[inline(always)]
-    fn slice_from_vec(fixed: Vec::<u8>) -> &'static [u8] {
+    fn extend_lifetime(fixed: &[u8]) -> &'static [u8] {
         unsafe { std::slice::from_raw_parts(fixed.as_ptr(), fixed.len()) }
     }
 
@@ -137,7 +142,10 @@ impl Inst {
             FSUB        => &[24],
             FMUL        => &[25],
             FDIV        => &[26],
-            DMP(stream) => Self::slice_from_vec(vec![27, *stream]),
+            DMP(stream) => Self::extend_lifetime(&[27, *stream]),
+            FUNC(addr)  => extend_from_bytes_string(28, addr),
+            CALL(addr)  => extend_from_bytes_string(29, addr),
+            RET         => &[30],
             HALT        => &[69],
         }
     }
@@ -184,6 +192,9 @@ impl Inst {
 
                 Ok((inst, 2))
             }
+
+            Some(28) => inst_from_bytes!(bytes, FUNC),
+            Some(29) => inst_from_bytes!(bytes, CALL),
 
             Some(69) => Ok((HALT, 1)),
             _        => Err(Trap::IllegalInstruction(Some(String::from_utf8_lossy(bytes).to_string()))),
@@ -259,18 +270,19 @@ impl TryFrom<&str> for Inst {
             "swap" => Ok(SWAP),
             "push" => Ok(PUSH(parse_word()?)),
             "dup"  => Ok(DUP(parse_word()?)),
-            "je" | "jl" | "jnge" | "jg" | "jnle" | "jne" | "jz" | "jnz" | "jmp" => {
+            "je" | "jl" | "jnge" | "jg" | "jnle" | "jne" | "jz" | "jnz" | "jmp" | "call" => {
                 if parse_word().is_err() {
                     match inst {
-                        "je"   => Ok(JE(get_oper()?)),
-                        "jl"   => Ok(JL(get_oper()?)),
-                        "jnge" => Ok(JNGE(get_oper()?)),
-                        "jg"   => Ok(JG(get_oper()?)),
-                        "jnle" => Ok(JNLE(get_oper()?)),
-                        "jne"  => Ok(JNE(get_oper()?)),
-                        "jz"   => Ok(JZ(get_oper()?)),
-                        "jnz"  => Ok(JNZ(get_oper()?)),
-                        "jmp"  => Ok(JMP(get_oper()?)),
+                        "je"    => Ok(JE(get_oper()?)),
+                        "jl"    => Ok(JL(get_oper()?)),
+                        "jnge"  => Ok(JNGE(get_oper()?)),
+                        "jg"    => Ok(JG(get_oper()?)),
+                        "jnle"  => Ok(JNLE(get_oper()?)),
+                        "jne"   => Ok(JNE(get_oper()?)),
+                        "jz"    => Ok(JZ(get_oper()?)),
+                        "jnz"   => Ok(JNZ(get_oper()?)),
+                        "jmp"   => Ok(JMP(get_oper()?)),
+                        "call"  => Ok(CALL(get_oper()?)),
                         _ => unreachable!()
                     }
                 } else {
@@ -278,6 +290,7 @@ impl TryFrom<&str> for Inst {
                 }
             }
             "bot" => Ok(BOT),
+            "ret" => Ok(RET),
             "dmp" => Ok(DMP(parse_u8()?)),
             _ => Err(inst_err)
         }
@@ -314,7 +327,10 @@ impl From<&Inst> for String {
             JNZ(oper)   => format!("    jnz     {oper}"),
             JMP(oper)   => format!("    jmp     {oper}"),
             LABEL(oper) => format!("{oper}:"),
+            FUNC(oper)  => format!("{oper} ::"),
+            CALL(oper)  => format!("    call    {oper}"),
             BOT         => format!("    bot"),
+            RET         => format!("    ret"),
             DMP(oper)   => format!("    dmp     {oper}"),
             HALT        => format!("    halt"),
         }
@@ -354,7 +370,10 @@ impl std::fmt::Display for Inst {
             JNZ(oper)   => write!(f, "Instruction: `JNZ`, operand: `{oper}`"),
             JMP(oper)   => write!(f, "Instruction: `JMP`, operand: `{oper}`"),
             LABEL(oper) => write!(f, "Instruction: `LABEL`, operand: `{oper}`"),
+            FUNC(oper)  => write!(f, "Instruction: `FUNC`, operand: `{oper}`"),
+            CALL(oper)  => write!(f, "Instruction: `CALL`, operand: `{oper}`"),
             BOT         => write!(f, "Instruction: `BOT`"),
+            RET         => write!(f, "Instruction: `RET`"),
             DMP(oper)   => write!(f, "Instruction: `DMP`, operand: {oper}"),
             HALT        => write!(f, "Instruction: `HALT`"),
         }

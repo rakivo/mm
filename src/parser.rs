@@ -1,5 +1,5 @@
 use std::process::exit;
-use crate::{Mm, Inst, Trap, MResult, Labels, Flags, DEBUG, ENTRY_POINT_LABEL};
+use crate::{Mm, Inst, Trap, MResult, Labels, Flags, Funcs, DEBUG, ENTRY_POINT_FUNCTION};
 
 #[derive(Debug)]
 pub struct Info<'a>(&'a str, usize);
@@ -26,28 +26,56 @@ fn parse_labels(line: &str, program: &mut MProgram, row: usize, _file_path: &str
 // label1, label2:
 //     ...
 
+    let splitted = line.split_whitespace().collect::<Vec::<_>>();
+    assert!(splitted.len() == 1, "Scheisse is NOT allowed here");
+
     program.extend
     (
-        line.split(',')
+        line[..line.len() - 1].split(',')
             .map(|label| (Inst::LABEL(label.trim().to_owned()), row))
     );
 
     Ok(())
 }
 
+fn parse_function(line: &str, program: &mut MProgram, row: usize, _file_path: &str) -> MResult::<()> {
+// func ::
+//     ...
+
+    let splitted = line.split_whitespace().collect::<Vec::<_>>();
+    assert!(splitted.len() <= 2, "Scheisse is NOT allowed here");
+
+    program.extend
+    (
+        line[..line.len() - 2].split(',')
+            .map(|func| (Inst::FUNC(func.trim().to_owned()), row))
+    );
+
+    Ok(())
+}
+
 fn parse_line(line: &str, program: &mut MProgram, row: usize, file_path: &str) -> MResult::<()> {
-    if line.ends_with(':') && matches!(line.chars().next(), Some(ch) if ch.is_ascii()) {
-        parse_labels(&line[..line.len() - 1], program, row, file_path)
+    let first = line.chars().next();
+    let matches = matches!(&first, Some(ch) if ch.is_ascii());
+
+    if matches && line.ends_with("::") {
+        assert!(line.len() > 2, "Function without a name");
+        parse_function(&line, program, row, file_path)
+    } else if matches && line.ends_with(':') {
+        assert!(line.len() > 1, "Label without a name");
+        parse_labels(&line, program, row, file_path)
     } else {
-        program.push((Inst::try_from(line).map_err(|err| {
+        let inst = Inst::try_from(line).map_err(|err| {
             MTrap(err, Some(Info(file_path, row)))
-        }).unwrap_or_report(), row));
+        }).unwrap_or_report();
+
+        program.push((inst, row));
 
         Ok(())
     }
 }
 
-fn comptime_jumps_check<'a>(program: &MProgram, labels: &Labels, file_path: &'a str) -> MMResult::<'a, ()> {
+fn comptime_jfs_check<'a>(program: &MProgram, labels: &Labels, funcs: &Funcs, file_path: &'a str) -> MMResult::<'a, ()> {
     use Inst::*;
     for (inst, row) in program.iter() {
         match inst {
@@ -63,6 +91,13 @@ fn comptime_jumps_check<'a>(program: &MProgram, labels: &Labels, file_path: &'a 
             {
                 if !labels.contains_key(label) {
                     let trap = Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned());
+                    let info = Info(file_path, *row);
+                    return Err(MTrap(trap, Some(info)))
+                }
+            }
+            CALL(ref func) => {
+                if !funcs.contains_key(func) {
+                    let trap = Trap::InvalidFunction(func.to_owned(), "Not found in function map".to_owned());
                     let info = Info(file_path, *row);
                     return Err(MTrap(trap, Some(info)))
                 }
@@ -95,6 +130,7 @@ impl Mm {
             program.push((Inst::HALT, program.last().unwrap().1 + 1));
         }
 
+        let funcs = Mm::process_funcs_m(&program);
         let labels = Mm::process_labels_m(&program);
 
         if DEBUG {
@@ -102,19 +138,21 @@ impl Mm {
             println!("{program:?}");
         }
 
-        let Some(entry_label) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT_LABEL) else {
+        let Some(entry_function) = funcs.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT_FUNCTION) else {
             let trap = Trap::NoEntryPointFound(file_path.to_owned());
             return Err(MTrap(trap, None))
         };
 
-        comptime_jumps_check(&program, &labels, file_path).unwrap_or_report();
+        comptime_jfs_check(&program, &labels, &funcs, file_path).unwrap_or_report();
 
         let mm = Mm {
             stack: Vec::with_capacity(Mm::STACK_CAP),
+            call_stack: Vec::with_capacity(Mm::STACK_CAP),
+            funcs,
             labels,
             flags: Flags::new(),
             program: program.into_iter().map(|x| x.0).collect(),
-            ip: entry_label.1,
+            ip: entry_function.1,
             halt: false
         };
 

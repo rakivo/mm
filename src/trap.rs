@@ -13,6 +13,7 @@ pub enum Trap {
     NoEntryPointFound(String),
     InvalidOperand(InstString),
     InvalidLabel(String, String),
+    InvalidFunction(String, String),
     IllegalInstruction(Option::<String>),
     DivisionOfDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
 }
@@ -37,6 +38,7 @@ impl std::fmt::Debug for Trap {
             DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst}"),
             InvalidOperand(inst)               => write!(f, "Invalid operand, Last executed {inst}"),
             InvalidLabel(label, reason)        => write!(f, "Invalid label: `{label}`: {reason}"),
+            InvalidFunction(func, reason)      => write!(f, "Invalid function: `{func}`: {reason}"),
             IllegalInstruction(inst_opt)       => if let Some(inst) = inst_opt {
                 write!(f, "Illegal instruction: {inst}")
             } else { write!(f, "Illegal instruction") }

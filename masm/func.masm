@@ -1,0 +1,23 @@
+fn1 ::
+    push 34
+    push 35
+    iadd
+    dmp 1
+    pop
+    ret
+
+fn2 ::
+    push 659
+    push 239
+    isub
+    dmp 1
+    pop
+    ret
+
+fn3 ::
+    call fn1
+    call fn2
+    ret
+
+_start ::
+    call fn3

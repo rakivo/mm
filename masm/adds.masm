@@ -1,3 +1,6 @@
+_start ::
+    jmp faddin
+
 faddin:
     push 34.5
     push 34.5
@@ -17,3 +20,13 @@ isubbin:
     push 213
     push 144
     isub
+
+out:
+    dmp 1
+    pop
+    dmp 1
+    pop
+    dmp 1
+    pop
+    dmp 1
+    pop
