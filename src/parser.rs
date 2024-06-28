@@ -1,4 +1,8 @@
-use std::{process::exit, collections::VecDeque};
+use std::{
+    process::exit,
+    collections::VecDeque,
+    time::{SystemTime, UNIX_EPOCH, Duration}
+};
 use crate::{Mm, Inst, Trap, MResult, Labels, Flags, Funcs, DEBUG, ENTRY_POINT_FUNCTION};
 
 #[derive(Debug)]
@@ -19,6 +23,26 @@ impl std::fmt::Debug for MTrap<'_> {
         } else {
             write!(f, "{trap:?}")
         }
+    }
+}
+
+pub fn time_msg(msg: &str) {
+    let now = SystemTime::now();
+    if let Ok(dur) = now.duration_since(UNIX_EPOCH) {
+        let secs_ = dur.as_secs();
+        let nans_ = dur.subsec_nanos();
+
+        let dt_secs = (UNIX_EPOCH + Duration::new(secs_, nans_)).duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_secs();
+
+        let rem_secs = dt_secs % 86400;
+        let hrs = rem_secs / 3600;
+        let rem_secs = rem_secs % 3600;
+        let mins = rem_secs / 60;
+        let secs = rem_secs % 60;
+
+        println!("{msg} at: {hrs:02}:{mins:02}:{secs:02}")
     }
 }
 
@@ -119,6 +143,8 @@ impl Mm {
             err
         }).unwrap_or_report();
 
+        time_msg("Started parsing");
+
         let mut program = MProgram::new();
         for (row, line) in file.lines().enumerate() {
             let trimmed = line.trim();
@@ -144,6 +170,8 @@ impl Mm {
         };
 
         comptime_jfs_check(&program, &labels, &funcs, file_path).unwrap_or_report();
+
+        time_msg("Ended parsing");
 
         let mm = Mm {
             stack: VecDeque::with_capacity(Mm::STACK_CAP),

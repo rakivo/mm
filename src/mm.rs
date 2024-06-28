@@ -456,6 +456,8 @@ impl Mm {
     }
 
     pub fn execute_program(&mut self, debug: bool, limit: Option::<usize>) -> Result<(), Trap> {
+        time_msg("Started executing program");
+
         let mut count = 0;
         let limit = limit.unwrap_or(usize::MAX);
         while !self.halt() && count < limit {
@@ -467,6 +469,8 @@ impl Mm {
 
             count += 1;
         }
+
+        time_msg("Ended executing program");
 
         Ok(())
     }
