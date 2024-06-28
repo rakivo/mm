@@ -509,7 +509,7 @@ impl Mm {
 }
 
 /* TODO:
-    (#6) Add debug messages like `started parsing at: hh:mm::ss`, `started execution at ...`.
+    (#8) Fix to/from binary operations with NaN-boxes in inst.rs
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
     2. Introduce MasmTranslator struct, that translates masm and report errors proper way.
