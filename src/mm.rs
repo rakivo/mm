@@ -366,14 +366,14 @@ impl Mm {
                 }
             }
 
-            JE(ref label)
-                | JL(ref label)
-                | JG(ref label)
-                | JNGE(ref label)
-                | JNE(ref label)
-                | JNLE(ref label)
-                | JZ(ref label)
-                | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
+              JE(ref label)
+            | JL(ref label)
+            | JG(ref label)
+            | JNGE(ref label)
+            | JNE(ref label)
+            | JNLE(ref label)
+            | JZ(ref label)
+            | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
