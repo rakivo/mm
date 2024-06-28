@@ -529,12 +529,7 @@ impl Mm {
 }
 
 /* TODO:
-    (#5) Introduce functions.
-
-    Something like that:
-    ```
-    fn func:
-    ```
+    (#7) Change std::vec::Vec type to std::collections::VecDeque in the Mm struct to speed up runtime
 
     (#6) Add debug messages like `started parsing at: hh:mm::ss`, `started execution at ...`.
 
