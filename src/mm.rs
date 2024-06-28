@@ -263,9 +263,7 @@ impl Mm {
         };
 
         if *ip >= program_len {
-            eprintln!(
-                "ERROR: operand `{ip}` is outside of program bounds, program len: {program_len}"
-            );
+            eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {program_len}");
             return Err(Trap::InvalidLabel(label.to_owned(), "Out of bounds".to_owned()))
         }
 
@@ -539,8 +537,6 @@ impl Mm {
 }
 
 /* TODO:
-    (#7) Change std::vec::Vec type to std::collections::VecDeque in the Mm struct to speed up runtime
-
     (#6) Add debug messages like `started parsing at: hh:mm::ss`, `started execution at ...`.
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
