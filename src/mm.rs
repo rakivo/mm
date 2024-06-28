@@ -91,34 +91,14 @@ impl std::fmt::Display for Mm {
 }
 
 impl Mm {
-    const STACK_CAP: usize = 1024;
-
-    fn process_funcs_m(program: &MProgram) -> Funcs {
-        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), (inst, _)| {
-            Self::process_func(inst, &mut funcs, ip);
-            (funcs, ip + 1)
-        }).0
-    }
+    const STACK_CAP: usize = 8 * 1024;
+    const CALL_STACK_CAP: usize = 8 * 128;
 
     fn process_func(inst: &Inst, funcs: &mut Funcs, ip: usize) {
         match inst {
             Inst::FUNC(func) => { funcs.insert(func.to_owned(), ip); }
             _ => {}
         }
-    }
-
-    fn process_funcs(program: &Program) -> Funcs {
-        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), inst| {
-            Self::process_func(inst, &mut funcs, ip);
-            (funcs, ip + 1)
-        }).0
-    }
-
-    fn process_labels_m(program: &MProgram) -> Labels {
-        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (inst, _)| {
-            Self::process_label(inst, &mut labels, ip);
-            (labels, ip + 1)
-        }).0
     }
 
     fn process_label(inst: &Inst, labels: &mut Labels, ip: usize) {
@@ -128,6 +108,31 @@ impl Mm {
         }
     }
 
+    #[inline]
+    fn process_funcs_m(program: &MProgram) -> Funcs {
+        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), (inst, _)| {
+            Self::process_func(inst, &mut funcs, ip);
+            (funcs, ip + 1)
+        }).0
+    }
+
+    #[inline]
+    fn process_funcs(program: &Program) -> Funcs {
+        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), inst| {
+            Self::process_func(inst, &mut funcs, ip);
+            (funcs, ip + 1)
+        }).0
+    }
+
+    #[inline]
+    fn process_labels_m(program: &MProgram) -> Labels {
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (inst, _)| {
+            Self::process_label(inst, &mut labels, ip);
+            (labels, ip + 1)
+        }).0
+    }
+
+    #[inline]
     fn process_labels(program: &Program) -> Labels {
         program.iter().fold((Labels::new(), 0), |(mut labels, ip), inst| {
             Self::process_label(inst, &mut labels, ip);
@@ -139,7 +144,7 @@ impl Mm {
         let program = program.to_vec();
         Mm {
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
             funcs: Self::process_funcs(&program),
             labels: Self::process_labels(&program),
             flags: Flags::new(),
@@ -152,7 +157,7 @@ impl Mm {
     pub fn new(program: Program) -> Mm {
         Mm {
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
             funcs: Self::process_funcs(&program),
             labels: Self::process_labels(&program),
             flags: Flags::new(),
@@ -389,7 +394,6 @@ impl Mm {
                 }
             }
 
-
             BOT => {
                 if let Some(first) = self.stack.front() {
                     if self.stack.len() < Mm::STACK_CAP {
@@ -417,12 +421,16 @@ impl Mm {
                 return Err(Trap::StackUnderflow(inst))
             }
 
-            CALL(addr) => {
+            CALL(ref addr) => {
                 if self.program.len() > self.ip {
-                    self.call_stack.push_back(self.ip + 1);
+                    if self.call_stack.len() < Self::CALL_STACK_CAP {
+                        self.call_stack.push_back(self.ip + 1);
+                    } else {
+                        return Err(Trap::CallStackOverflow(inst.to_owned()));
+                    }
                 }
 
-                if let Some(ip) = self.funcs.get(&addr) {
+                if let Some(ip) = self.funcs.get(addr) {
                     self.ip = *ip;
                     Ok(())
                 } else {
@@ -435,7 +443,7 @@ impl Mm {
                     self.ip = ip;
                     Ok(())
                 } else {
-                    panic!("Return address not found in stack")
+                    return Err(Trap::CallStackUnderflow(inst));
                 }
             }
 
