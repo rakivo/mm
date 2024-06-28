@@ -37,8 +37,8 @@ impl std::fmt::Debug for Trap {
         match self {
             StackOverflow(inst)                => write!(f, "Stack overflow, Last executed {inst}"),
             StackUnderflow(inst)               => write!(f, "Stack underflow, Last executed {inst}"),
-            CallStackOverflow(inst)                => write!(f, "Call stack overflow, Last executed {inst}"),
-            CallStackUnderflow(inst)               => write!(f, "Call stack underflow, Last executed {inst}"),
+            CallStackOverflow(inst)            => write!(f, "Call stack overflow, Last executed {inst}"),
+            CallStackUnderflow(inst)           => write!(f, "Call stack underflow, Last executed {inst}"),
             DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst}"),
             InvalidOperand(inst)               => write!(f, "Invalid operand, Last executed {inst}"),
             InvalidLabel(label, reason)        => write!(f, "Invalid label: `{label}`: {reason}"),
