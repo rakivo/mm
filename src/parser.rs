@@ -1,4 +1,4 @@
-use std::process::exit;
+use std::{process::exit, collections::VecDeque};
 use crate::{Mm, Inst, Trap, MResult, Labels, Flags, Funcs, DEBUG, ENTRY_POINT_FUNCTION};
 
 #[derive(Debug)]
@@ -146,8 +146,8 @@ impl Mm {
         comptime_jfs_check(&program, &labels, &funcs, file_path).unwrap_or_report();
 
         let mm = Mm {
-            stack: Vec::with_capacity(Mm::STACK_CAP),
-            call_stack: Vec::with_capacity(Mm::STACK_CAP),
+            stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
             funcs,
             labels,
             flags: Flags::new(),

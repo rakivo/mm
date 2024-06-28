@@ -20,7 +20,7 @@ TO_BIN = ./build/to_binary
 BINARIES = $(EXAMPLES:%.masm=./build/%)
 
 MASM_DIR = ./masm
-EXAMPLES = fib swap jumps
+EXAMPLES = fib jumps adds func
 EXAMPLES_SRC = $(EXAMPLES:%=$(MASM_DIR)/%.masm)
 BINARIES = $(EXAMPLES:%=$(BUILD_DIR)/%)
 

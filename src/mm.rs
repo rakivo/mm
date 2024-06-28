@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 pub mod nan;
 pub mod flag;
 pub mod inst;
@@ -22,8 +24,8 @@ pub type Labels = std::collections::HashMap<String, usize>;
 pub type Funcs = std::collections::HashMap<String, usize>;
 
 pub struct Mm {
-    stack: Vec::<Word>,
-    call_stack: Vec::<usize>,
+    stack: VecDeque::<Word>,
+    call_stack: VecDeque::<usize>,
 
     funcs: Funcs,
     labels: Labels,
@@ -74,7 +76,7 @@ impl std::fmt::Debug for Mm {
 impl std::fmt::Display for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: ")?;
-        if let Some(first) = self.stack.first() {
+        if let Some(first) = self.stack.front() {
             print_oper_f(f, &first)?;
             let (mut i, n) = (1, self.stack.len());
             while i < n {
@@ -136,8 +138,8 @@ impl Mm {
     pub fn new_slice(program: &[Inst]) -> Mm {
         let program = program.to_vec();
         Mm {
-            stack: Vec::with_capacity(Mm::STACK_CAP),
-            call_stack: Vec::with_capacity(Mm::STACK_CAP),
+            stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
             funcs: Self::process_funcs(&program),
             labels: Self::process_labels(&program),
             flags: Flags::new(),
@@ -149,8 +151,8 @@ impl Mm {
 
     pub fn new(program: Program) -> Mm {
         Mm {
-            stack: Vec::with_capacity(Mm::STACK_CAP),
-            call_stack: Vec::with_capacity(Mm::STACK_CAP),
+            stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
             funcs: Self::process_funcs(&program),
             labels: Self::process_labels(&program),
             flags: Flags::new(),
@@ -168,7 +170,7 @@ impl Mm {
     fn two_opers_finst(&mut self, inst: Inst, last: Word) -> MResult<()> {
         assert!(self.stack.len() > 0);
 
-        let prelast = self.stack.last_mut().unwrap();
+        let prelast = self.stack.back_mut().unwrap();
         let Some(b) = last.get_f64() else {
             return Err(Trap::DivisionOfDifferentTypes(prelast.get_type(), last.get_type()))
         };
@@ -188,7 +190,7 @@ impl Mm {
     fn two_opers_iinst(&mut self, inst: Inst, last: Word) -> MResult<()> {
         assert!(self.stack.len() > 0);
 
-        let prelast = self.stack.last_mut().unwrap();
+        let prelast = self.stack.back_mut().unwrap();
         let (Some(a), Some(b)) = (prelast.get_u64(), last.get_u64()) else {
             return Err(Trap::DivisionOfDifferentTypes(prelast.get_type(), last.get_type()))
         };
@@ -222,7 +224,7 @@ impl Mm {
         }
 
         let last = if pop {
-            self.stack.pop().unwrap()
+            self.stack.pop_back().unwrap()
         } else {
             self.stack[stack_len - 1].to_owned()
         };
@@ -234,9 +236,9 @@ impl Mm {
             SWAP => {
                 let a = *prelast;
                 let b = last;
-                self.stack.pop();
-                self.stack.push(b);
-                self.stack.push(a)
+                self.stack.pop_back();
+                self.stack.push_back(b);
+                self.stack.push_back(a)
             }
             _ => match typeflag {
                 1 => self.two_opers_iinst(inst, last)?,
@@ -284,7 +286,7 @@ impl Mm {
 
             PUSH(oper) => {
                 if self.stack.len() < Mm::STACK_CAP {
-                    self.stack.push(oper);
+                    self.stack.push_back(oper);
                     self.ip += 1;
                     Ok(())
                 } else {
@@ -294,7 +296,7 @@ impl Mm {
 
             POP => {
                 if !self.stack.is_empty() {
-                    self.stack.pop();
+                    self.stack.pop_back();
                     self.ip += 1;
                     Ok(())
                 } else {
@@ -303,7 +305,7 @@ impl Mm {
             }
 
             INC => {
-                if let Some(last) = self.stack.last_mut() {
+                if let Some(last) = self.stack.back_mut() {
                     let v = last.get_value();
                     *last = NaNBox::from_i64(v + 1);
                     self.ip += 1;
@@ -314,7 +316,7 @@ impl Mm {
             }
 
             DEC => {
-                if let Some(last) = self.stack.last_mut() {
+                if let Some(last) = self.stack.back_mut() {
                     let v = last.get_value();
                     *last = NaNBox::from_i64(v - 1);
                     self.ip += 1;
@@ -337,7 +339,7 @@ impl Mm {
             FDIV => self.two_opers_inst(FDIV, true, 2),
 
             CMP(oper) => {
-                if let Some(ref last) = self.stack.last() {
+                if let Some(ref last) = self.stack.back() {
                     self.flags.cmp(&last.as_u64(), &oper.as_u64());
                     self.ip += 1;
                     Ok(())
@@ -350,7 +352,7 @@ impl Mm {
                 if self.stack.len() > oper.0 as usize {
                     if self.stack.len() < Mm::STACK_CAP {
                         let val = self.stack[self.stack.len() - 1 - oper.0 as usize];
-                        self.stack.push(val);
+                        self.stack.push_back(val);
                         self.ip += 1;
                         Ok(())
                     } else {
@@ -361,14 +363,14 @@ impl Mm {
                 }
             }
 
-            JE(ref label)
-                | JL(ref label)
-                | JG(ref label)
-                | JNGE(ref label)
-                | JNE(ref label)
-                | JNLE(ref label)
-                | JZ(ref label)
-                | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
+              JE(ref label)
+            | JL(ref label)
+            | JG(ref label)
+            | JNGE(ref label)
+            | JNE(ref label)
+            | JNLE(ref label)
+            | JZ(ref label)
+            | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
@@ -389,9 +391,9 @@ impl Mm {
 
 
             BOT => {
-                if let Some(first) = self.stack.first() {
+                if let Some(first) = self.stack.front() {
                     if self.stack.len() < Mm::STACK_CAP {
-                        self.stack.push(*first);
+                        self.stack.push_back(*first);
                         self.ip += 1;
                         Ok(())
                     } else {
@@ -402,7 +404,7 @@ impl Mm {
                 }
             }
 
-            DMP(stream) => if let Some(last) = self.stack.last() {
+            DMP(stream) => if let Some(last) = self.stack.back() {
                 match stream {
                     1 => print_oper_s(std::io::stdout(), last).unwrap(),
                     2 => print_oper_s(std::io::stderr(), last).unwrap(),
@@ -417,7 +419,7 @@ impl Mm {
 
             CALL(addr) => {
                 if self.program.len() > self.ip {
-                    self.call_stack.push(self.ip + 1);
+                    self.call_stack.push_back(self.ip + 1);
                 }
 
                 if let Some(ip) = self.funcs.get(&addr) {
@@ -429,7 +431,7 @@ impl Mm {
             }
 
             RET => {
-                if let Some(ip) = self.call_stack.pop() {
+                if let Some(ip) = self.call_stack.pop_back() {
                     self.ip = ip;
                     Ok(())
                 } else {
@@ -492,8 +494,8 @@ impl Mm {
                 Inst::FUNC(ref func) => { funcs.insert(func.to_owned(), ip); }
                 _ => {}
             };
-            ip += 1;
             program.push(inst);
+            ip += 1;
             i += size;
         }
 
@@ -502,8 +504,8 @@ impl Mm {
         }
 
         let mm = Mm {
-            stack: Vec::with_capacity(Mm::STACK_CAP),
-            call_stack: Vec::with_capacity(Mm::STACK_CAP),
+            stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
             funcs,
             labels,
             flags: Flags::new(),

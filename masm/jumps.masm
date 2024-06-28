@@ -1,9 +1,13 @@
+_start ::
     push 34
+    dmp 1
     push 35
+    dmp 1
     jmp end
 
 add:
-    add
+    iadd
+    dmp 1
 
 end:
     cmp 69
