@@ -143,7 +143,9 @@ impl Mm {
             err
         }).unwrap_or_report();
 
-        time_msg("Started parsing");
+        if DEBUG {
+            time_msg("Started parsing");
+        }
 
         let mut program = MProgram::new();
         for (row, line) in file.lines().enumerate() {
@@ -159,11 +161,6 @@ impl Mm {
         let funcs = Mm::process_funcs_m(&program);
         let labels = Mm::process_labels_m(&program);
 
-        if DEBUG {
-            println!("{labels:?}");
-            println!("{program:?}");
-        }
-
         let Some(entry_function) = funcs.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT_FUNCTION) else {
             let trap = Trap::NoEntryPointFound(file_path.to_owned());
             return Err(MTrap(trap, None))
@@ -171,7 +168,9 @@ impl Mm {
 
         comptime_jfs_check(&program, &labels, &funcs, file_path).unwrap_or_report();
 
-        time_msg("Ended parsing");
+        if DEBUG {
+            time_msg("Ended parsing");
+        }
 
         let mm = Mm {
             stack: VecDeque::with_capacity(Mm::STACK_CAP),

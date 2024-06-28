@@ -366,14 +366,14 @@ impl Mm {
                 }
             }
 
-              JE(ref label)
-            | JL(ref label)
-            | JG(ref label)
-            | JNGE(ref label)
-            | JNE(ref label)
-            | JNLE(ref label)
-            | JZ(ref label)
-            | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
+            JE(ref label)
+                | JL(ref label)
+                | JG(ref label)
+                | JNGE(ref label)
+                | JNE(ref label)
+                | JNLE(ref label)
+                | JZ(ref label)
+                | JNZ(ref label) => self.jump_if_flag(label, Flag::try_from(&inst).unwrap()),
 
             JMP(label) => {
                 let Some(ip) = self.labels.get(&label) else {
@@ -456,7 +456,9 @@ impl Mm {
     }
 
     pub fn execute_program(&mut self, debug: bool, limit: Option::<usize>) -> Result<(), Trap> {
-        time_msg("Started executing program");
+        if DEBUG {
+            time_msg("Started executing program");
+        }
 
         let mut count = 0;
         let limit = limit.unwrap_or(usize::MAX);
@@ -470,7 +472,9 @@ impl Mm {
             count += 1;
         }
 
-        time_msg("Ended executing program");
+        if DEBUG {
+            time_msg("Ended executing program");
+        }
 
         Ok(())
     }
