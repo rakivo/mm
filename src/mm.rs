@@ -20,8 +20,8 @@ pub type Word = NaNBox;
 pub type MResult<T> = std::result::Result<T, Trap>;
 
 pub type Program = Vec<Inst>;
-pub type Labels = std::collections::HashMap<String, usize>;
 pub type Funcs = std::collections::HashMap<String, usize>;
+pub type Labels = std::collections::HashMap<String, usize>;
 
 pub struct Mm {
     stack: VecDeque::<Word>,
@@ -384,10 +384,8 @@ impl Mm {
                     self.ip = *ip;
                     Ok(())
                 } else {
-                    eprintln!(
-                        "ERROR: operand `{ip}` is outside of program bounds, program len: {len}",
-                        len = self.program.len()
-                    );
+                    eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {len}",
+                              len = self.program.len());
                     Err(Trap::InvalidLabel(label, "Out of bounds".to_owned()))
                 }
             }
@@ -399,10 +397,10 @@ impl Mm {
                         self.ip += 1;
                         Ok(())
                     } else {
-                        return Err(Trap::StackOverflow(inst))
+                        Err(Trap::StackOverflow(inst))
                     }
                 } else {
-                    return Err(Trap::StackUnderflow(inst))
+                    Err(Trap::StackUnderflow(inst))
                 }
             }
 
@@ -416,7 +414,7 @@ impl Mm {
                 println!();
                 Ok(())
             } else {
-                return Err(Trap::StackUnderflow(inst))
+                Err(Trap::StackUnderflow(inst))
             }
 
             CALL(ref addr) => {
@@ -424,7 +422,7 @@ impl Mm {
                     if self.call_stack.len() < Self::CALL_STACK_CAP {
                         self.call_stack.push_back(self.ip + 1);
                     } else {
-                        return Err(Trap::CallStackOverflow(inst.to_owned()));
+                        return Err(Trap::CallStackOverflow(inst.to_owned()))
                     }
                 }
 
@@ -432,7 +430,7 @@ impl Mm {
                     self.ip = *ip;
                     Ok(())
                 } else {
-                    return Err(Trap::InvalidFunction(addr.to_owned(), "Not found in function map".to_owned()))
+                    Err(Trap::InvalidFunction(addr.to_owned(), "Not found in function map".to_owned()))
                 }
             }
 
@@ -441,7 +439,7 @@ impl Mm {
                     self.ip = ip;
                     Ok(())
                 } else {
-                    return Err(Trap::CallStackUnderflow(inst));
+                    Err(Trap::CallStackUnderflow(inst))
                 }
             }
 
