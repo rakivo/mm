@@ -1,9 +1,11 @@
 use std::{
+    str::Lines,
     process::exit,
+    iter::Enumerate,
     collections::VecDeque,
     time::{SystemTime, UNIX_EPOCH, Duration}
 };
-use crate::{Mm, Inst, MTrap, Trap, MResult, Program, Labels, Flags, Funcs, DEBUG, ENTRY_POINT_FUNCTION};
+use crate::{Mm, Inst, MTrap, Trap, MResult, Program, Labels, Flags, DEBUG, ENTRY_POINT};
 
 pub type MMResult<T> = std::result::Result::<T, MTrap>;
 
@@ -40,60 +42,72 @@ pub fn time_msg(msg: &str) {
     }
 }
 
-fn parse_labels(line: &str, program: &mut Program, row: usize, _file_path: &str) -> MResult::<()> {
-// label1, label2:
-//     ...
+struct Parser<'a> {
+    iter: Enumerate::<Lines<'a>>,
 
-    let splitted = line.split_whitespace().collect::<Vec::<_>>();
-    assert!(splitted.len() == 1, "Scheisse is NOT allowed here");
-
-    program.extend
-    (
-        line[..line.len() - 1].split(',')
-            .map(|label| (Inst::LABEL(label.trim().to_owned()), row))
-    );
-
-    Ok(())
+    program: Program,
+    file_path: &'a str
 }
 
-fn parse_function(line: &str, program: &mut Program, row: usize, _file_path: &str) -> MResult::<()> {
-// func ::
-//     ...
+impl<'a> Parser<'a> {
+    pub fn new(content: &'a str, file_path: &'a str) -> Self {
+        Self {
+            iter: content.lines().enumerate(),
+            program: Program::new(),
+            file_path
+        }
+    }
 
-    let splitted = line.split_whitespace().collect::<Vec::<_>>();
-    assert!(splitted.len() <= 2, "Scheisse is NOT allowed here");
+    fn parse_labels(&mut self, line: &'a str, row: usize) -> MResult::<()> {
+        // label1, label2:
+        //     ...
 
-    program.extend
-    (
-        line[..line.len() - 2].split(',')
-            .map(|func| (Inst::FUNC(func.trim().to_owned()), row))
-    );
+        let splitted = line.split_whitespace().collect::<Vec::<_>>();
+        assert!(splitted.len() == 1, "{f}:{r}: Scheisse is NOT allowed here", f = self.file_path, r = row + 1);
 
-    Ok(())
-}
-
-fn parse_line(line: &str, program: &mut Program, row: usize, file_path: &str) -> MResult::<()> {
-    let first = line.chars().next();
-    let matches = matches!(&first, Some(ch) if ch.is_ascii());
-
-    if matches && line.ends_with("::") {
-        assert!(line.len() > 2, "Function without a name");
-        parse_function(&line, program, row, file_path)
-    } else if matches && line.ends_with(':') {
-        assert!(line.len() > 1, "Label without a name");
-        parse_labels(&line, program, row, file_path)
-    } else {
-        let inst = Inst::try_from(line).map_err(|err| {
-            MTrap(err, Some((file_path.to_owned(), row)))
-        }).unwrap_or_report();
-
-        program.push((inst, row));
+        self.program.extend
+        (
+            line[..line.len() - 1].split(',')
+                .map(|label| (Inst::LABEL(label.trim().to_owned()), row))
+        );
 
         Ok(())
     }
+
+    fn parse_line(&mut self, line: &'a str, row: usize) -> MResult::<()> {
+        let Some(first) = line.chars().next() else {
+            return Ok(())
+        };
+
+        if first.is_ascii() && line.ends_with(':') {
+            assert!(line.len() > 1, "Label without a name");
+            self.parse_labels(&line, row)
+        } else {
+            let inst = Inst::try_from(line).map_err(|err| {
+                MTrap(err, Some((self.file_path.to_owned(), row)))
+            }).unwrap_or_report();
+
+            self.program.push((inst, row));
+            Ok(())
+        }
+    }
+
+    fn parse(mut self) -> MResult::<Program> {
+        for (row, line) in self.iter.to_owned() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with(';') { continue }
+            self.parse_line(&line, row)?;
+        }
+
+        if matches!(self.program.last(), Some(last) if last.0 != Inst::HALT) {
+            self.program.push((Inst::HALT, self.program.last().unwrap().1 + 1));
+        }
+
+        Ok(self.program)
+    }
 }
 
-fn comptime_jfs_check<'a>(program: &Program, labels: &Labels, funcs: &Funcs, file_path: &'a str) -> MMResult::<()> {
+fn comptime_labels_check<'a>(program: &Program, labels: &Labels, file_path: &'a str) -> MMResult::<()> {
     use Inst::*;
     for (inst, row) in program.iter() {
         match inst {
@@ -105,16 +119,11 @@ fn comptime_jfs_check<'a>(program: &Program, labels: &Labels, funcs: &Funcs, fil
             | JNLE(ref label)
             | JZ(ref label)
             | JNZ(ref label)
-            | JMP(ref label) =>
+            | JMP(ref label)
+            | CALL(ref label) =>
             {
                 if !labels.contains_key(label) {
                     let trap = Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned());
-                    return Err(MTrap(trap, Some((file_path.to_owned(), *row))))
-                }
-            }
-            CALL(ref func) => {
-                if !funcs.contains_key(func) {
-                    let trap = Trap::InvalidFunction(func.to_owned(), "Not found in function map".to_owned());
                     return Err(MTrap(trap, Some((file_path.to_owned(), *row))))
                 }
             }
@@ -139,26 +148,17 @@ impl Mm {
             time_msg("Started parsing");
         }
 
-        let mut program = Program::new();
-        for (row, line) in file.lines().enumerate() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with(';') { continue }
-            parse_line(&line, &mut program, row, file_path).unwrap_or_report();
-        }
+        let parser = Parser::new(&file, file_path);
 
-        if matches!(program.last(), Some(last) if last.0 != Inst::HALT) {
-            program.push((Inst::HALT, program.last().unwrap().1 + 1));
-        }
-
-        let funcs = Mm::process_funcs(&program);
+        let program = parser.parse().unwrap_or_report();
         let labels = Mm::process_labels(&program);
 
-        let Some(entry_function) = funcs.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT_FUNCTION) else {
+        let Some(entry_point) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT) else {
             let trap = Trap::NoEntryPointFound(file_path.to_owned());
             return Err(MTrap(trap, None))
         };
 
-        comptime_jfs_check(&program, &labels, &funcs, file_path).unwrap_or_report();
+        comptime_labels_check(&program, &labels, file_path).unwrap_or_report();
 
         if DEBUG {
             time_msg("Ended parsing");
@@ -167,12 +167,15 @@ impl Mm {
         let mm = Mm {
             file_path: file_path.to_owned(),
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            funcs,
+            call_stack: if program.is_empty() {
+                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
+            } else {
+                vec![program.len() - 1].into()
+            },
             labels,
             flags: Flags::new(),
             program,
-            ip: entry_function.1,
+            ip: entry_point.1,
             halt: false
         };
 

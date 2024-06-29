@@ -36,7 +36,6 @@ pub enum Inst {
     BOT,
     DMP(u8),
 
-    FUNC(String),
     CALL(String),
 
     RET,
@@ -45,14 +44,16 @@ pub enum Inst {
 }
 
 const MAX_STR_LEN: usize = 16 * 8;
-const INSTRUCTION_SIZE: usize = 1 * 8;
+const INSTRUCTION_SIZE: usize = 8;
 
-fn extend_from_bytes_word(n: u8, val: u64) -> &'static [u8] {
+const _: () = assert!(std::mem::size_of::<f64>() == INSTRUCTION_SIZE, "Mm's designed to be working on 64bit");
+
+fn extend_from_bytes_nan(n: u8, val: &NaNBox) -> &'static [u8] {
     let mut bytes = [0u8; INSTRUCTION_SIZE + 1];
     bytes[0] = n;
-    let le_bytes = &val.to_le_bytes();
+    let le_bytes = val.as_f64().to_le_bytes();
     assert!(le_bytes.len() == 8);
-    bytes[1..].copy_from_slice(le_bytes);
+    bytes[1..].copy_from_slice(&le_bytes);
     unsafe { std::slice::from_raw_parts(bytes.as_ptr(), INSTRUCTION_SIZE + 1) }
 }
 
@@ -70,17 +71,11 @@ fn extend_to_bytes_string(n: u8, val: &str) -> &'static [u8] {
     unsafe { std::slice::from_raw_parts(bytes.as_ptr(), part_one_end + str_len) }
 }
 
-fn nan_from_bytes(bytes: &[u8]) -> Word {
+fn nan_from_bytes(bytes: &[u8]) -> NaNBox {
     let mut array = [0; 8];
     array.copy_from_slice(&bytes[1..9]);
-    NaNBox(f64::from_le_bytes(array))
-}
-
-fn i64_nan_from_bytes(bytes: &[u8]) -> NaNBox {
-    let mut array = [0; 8];
-    array.copy_from_slice(&bytes[1..9]);
-    let i64_ = i64::from_le_bytes(array);
-    NaNBox::from_i64(i64_)
+    let f = f64::from_le_bytes(array);
+    NaNBox(f)
 }
 
 fn string_from_bytes(bytes: &[u8], n: usize) -> String {
@@ -90,8 +85,7 @@ fn string_from_bytes(bytes: &[u8], n: usize) -> String {
 macro_rules! inst_from_bytes {
     (i.$b: ident, $ret: tt) => {{
         if $b.len() >= 9 {
-            // let a = nan_from_bytes(&$b);
-            let a = i64_nan_from_bytes(&$b);
+            let a = nan_from_bytes(&$b);
             Ok((Inst::$ret(a), 9))
         } else {
             Err(Trap::InvalidOperand(stringify!($ret).to_owned(), None))
@@ -122,7 +116,7 @@ impl Inst {
         use Inst::*;
         match self {
             NOP         => &[0],
-            PUSH(val)   => extend_from_bytes_word(1, val.as_u64()),
+            PUSH(val)   => extend_from_bytes_nan(1, val),
             POP         => &[2],
             INC         => &[3],
             DEC         => &[4],
@@ -132,9 +126,9 @@ impl Inst {
             IMUL        => &[7],
             IDIV        => &[8],
 
-            CMP(val)    => extend_from_bytes_word(9, val.as_u64()),
+            CMP(val)    => extend_from_bytes_nan(9, val),
             SWAP        => &[10],
-            DUP(val)    => extend_from_bytes_word(11, val.as_u64()),
+            DUP(val)    => extend_from_bytes_nan(11, val),
             JE(addr)    => extend_to_bytes_string(12, addr),
             JL(addr)    => extend_to_bytes_string(13, addr),
             JNGE(addr)  => extend_to_bytes_string(14, addr),
@@ -151,8 +145,7 @@ impl Inst {
             FMUL        => &[25],
             FDIV        => &[26],
             DMP(stream) => Self::extend_lifetime(&[27, *stream]),
-            FUNC(addr)  => extend_to_bytes_string(28, addr),
-            CALL(addr)  => extend_to_bytes_string(29, addr),
+            CALL(addr)  => extend_to_bytes_string(28, addr),
             RET         => &[30],
             HALT        => &[69],
         }
@@ -201,11 +194,10 @@ impl Inst {
                 Ok((inst, 2))
             }
 
-            Some(28) => inst_from_bytes!(bytes, FUNC),
-            Some(29) => inst_from_bytes!(bytes, CALL),
+            Some(28) => inst_from_bytes!(bytes, CALL),
 
             Some(69) => Ok((HALT, 1)),
-            _        => Err(Trap::IllegalInstruction(Some(String::from_utf8_lossy(bytes).to_string()))),
+            _        => Err(Trap::UndefinedSymbol(String::from_utf8_lossy(bytes).to_string())),
         }
     }
 }
@@ -220,7 +212,7 @@ impl TryFrom<&str> for Inst {
 
         let (inst_err, inst) = {
             let inst_string = splitted.next();
-            let inst_err = Trap::IllegalInstruction(inst_string.map(|s| s.to_owned()));
+            let inst_err = Trap::UndefinedSymbol(inst_string.unwrap_or("[EMPTY]").to_owned());
             let inst = inst_string.ok_or(inst_err.to_owned())?;
             (inst_err, inst)
         };
@@ -335,7 +327,6 @@ impl From<&Inst> for String {
             JNZ(oper)   => format!("    jnz     {oper}"),
             JMP(oper)   => format!("    jmp     {oper}"),
             LABEL(oper) => format!("{oper}:"),
-            FUNC(oper)  => format!("{oper} ::"),
             CALL(oper)  => format!("    call    {oper}"),
             BOT         => format!("    bot"),
             RET         => format!("    ret"),
@@ -378,7 +369,6 @@ impl std::fmt::Display for Inst {
             JNZ(oper)   => write!(f, "Instruction: `JNZ`, operand: `{oper}`"),
             JMP(oper)   => write!(f, "Instruction: `JMP`, operand: `{oper}`"),
             LABEL(oper) => write!(f, "Instruction: `LABEL`, operand: `{oper}`"),
-            FUNC(oper)  => write!(f, "Instruction: `FUNC`, operand: `{oper}`"),
             CALL(oper)  => write!(f, "Instruction: `CALL`, operand: `{oper}`"),
             BOT         => write!(f, "Instruction: `BOT`"),
             RET         => write!(f, "Instruction: `RET`"),

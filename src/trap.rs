@@ -10,9 +10,9 @@ pub enum Trap {
     IllegalInstructionAccess,
     NoEntryPointFound(String),
     InvalidOperand(String, Option::<String>),
+    UndefinedSymbol(String),
     InvalidLabel(String, String),
     InvalidFunction(String, String),
-    IllegalInstruction(Option::<String>),
     DivisionOfDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
 }
 
@@ -25,14 +25,12 @@ impl std::fmt::Debug for Trap {
             CallStackOverflow(inst)            => write!(f, "Call stack overflow, Last executed {inst}"),
             CallStackUnderflow(inst)           => write!(f, "Call stack underflow, Last executed {inst}"),
             DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst}"),
+            UndefinedSymbol(sym)               => write!(f, "Undefined symbol: {sym}"),
             InvalidOperand(inst, oper)         => if let Some(oper) = oper {
                 write!(f, "Invalid operand, Last executed instruction: {inst}, {oper}")
             } else { write!(f, "Invalid operand, Last executed instruction: {inst}") }
             InvalidLabel(label, reason)        => write!(f, "Invalid label: `{label}`: {reason}"),
             InvalidFunction(func, reason)      => write!(f, "Invalid function: `{func}`: {reason}"),
-            IllegalInstruction(inst_opt)       => if let Some(inst) = inst_opt {
-                write!(f, "Illegal instruction: {inst}")
-            } else { write!(f, "Illegal instruction") }
             NoEntryPointFound(file_path)       => write!(f, "No entry point found in: {file_path}"),
             IllegalInstructionAccess           => write!(f, "Illegal instruction access"),
             DivisionOfDifferentTypes(ty1, ty2) => write!(f, "Can't divide different types, type 1: {ty1:?}, type 2: {ty2:?}")

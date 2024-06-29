@@ -5,3 +5,4 @@ Cargo.lock
 generated.masm
 *.bin
 *.asm
+*.c

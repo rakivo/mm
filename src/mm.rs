@@ -14,14 +14,13 @@ pub use parser::*;
 
 const DEBUG: bool = false;
 
-const ENTRY_POINT_FUNCTION: &str = "_start";
+const ENTRY_POINT: &str = "_start";
 
 pub type Word = NaNBox;
 pub type MResult<T> = std::result::Result<T, Trap>;
 
 pub type Program = Vec<(Inst, usize)>;
 
-pub type Funcs = std::collections::HashMap<String, usize>;
 pub type Labels = std::collections::HashMap<String, usize>;
 
 pub struct Mm {
@@ -30,7 +29,6 @@ pub struct Mm {
     stack: VecDeque::<Word>,
     call_stack: VecDeque::<usize>,
 
-    funcs: Funcs,
     labels: Labels,
     flags: Flags,
     program: Program,
@@ -97,16 +95,6 @@ impl Mm {
     const STACK_CAP: usize = 8 * 1024;
     const CALL_STACK_CAP: usize = 8 * 128;
 
-    fn process_funcs(program: &Program) -> Funcs {
-        program.iter().fold((Funcs::new(), 0), |(mut funcs, ip), (inst, _)| {
-            match inst {
-                Inst::FUNC(func) => { funcs.insert(func.to_owned(), ip); }
-                _ => {}
-            }
-            (funcs, ip + 1)
-        }).0
-    }
-
     fn process_labels(program: &Program) -> Labels {
         program.iter().fold((Labels::new(), 0), |(mut labels, ip), (inst, _)| {
             match inst {
@@ -121,8 +109,11 @@ impl Mm {
         Mm {
             file_path: file_path.to_owned(),
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
-            funcs: Self::process_funcs(&program),
+            call_stack: if program.is_empty() {
+                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
+            } else {
+                vec![program.len() - 1].into()
+            },
             labels: Self::process_labels(&program),
             flags: Flags::new(),
             program,
@@ -388,7 +379,7 @@ impl Mm {
                     }
                 }
 
-                if let Some(ip) = self.funcs.get(addr) {
+                if let Some(ip) = self.labels.get(addr) {
                     self.ip = *ip;
                     Ok(())
                 } else {
@@ -463,12 +454,11 @@ impl Mm {
             err
         }).unwrap();
 
-        let (mut i, mut ip, mut program, mut labels, mut funcs) = (0, 0, Program::new(), Labels::new(), Funcs::new());
+        let (mut i, mut ip, mut program, mut labels) = (0, 0, Program::new(), Labels::new());
         while i < buf.len() {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst {
                 Inst::LABEL(ref label) => { labels.insert(label.to_owned(), ip); }
-                Inst::FUNC(ref func) => { funcs.insert(func.to_owned(), ip); }
                 _ => {}
             };
             program.push((inst, ip));
@@ -483,8 +473,11 @@ impl Mm {
         let mm = Mm {
             file_path: file_path.to_owned(),
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            funcs,
+            call_stack: if let Some(last) = program.last() {
+                vec![last.1].into()
+            } else {
+                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
+            },
             labels,
             flags: Flags::new(),
             program,

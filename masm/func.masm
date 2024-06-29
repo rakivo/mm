@@ -1,4 +1,4 @@
-fn1 ::
+fn1:
     push 34
     push 35
     iadd
@@ -6,7 +6,7 @@ fn1 ::
     pop
     ret
 
-fn2 ::
+fn2:
     push 659
     push 239
     isub
@@ -14,10 +14,10 @@ fn2 ::
     pop
     ret
 
-fn3 ::
+fn3:
     call fn1
     call fn2
     ret
 
-_start ::
+_start:
     call fn3
