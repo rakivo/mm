@@ -46,6 +46,40 @@ pub enum Inst {
 const MAX_STR_LEN: usize = 16 * 8;
 const INSTRUCTION_SIZE: usize = 8;
 
+pub const ALL_VARIANTS_AS_STR: &'static [&'static str] = &[
+    "nop",
+    "push",
+    "pop",
+    "inc",
+    "dec",
+    "iadd",
+    "isub",
+    "imul",
+    "idiv",
+    "fadd",
+    "fsub",
+    "fmul",
+    "fdiv",
+    "cmp",
+    "swap",
+    "dup",
+    "je",
+    "jl",
+    "jnge",
+    "jg",
+    "jnle",
+    "jne",
+    "jz",
+    "jnz",
+    "jmp",
+    "label",
+    "bot",
+    "dmp",
+    "call",
+    "ret",
+    "halt"
+];
+
 const _: () = assert!(std::mem::size_of::<f64>() == INSTRUCTION_SIZE, "Mm's designed to be working on 64bit");
 
 fn extend_from_bytes_nan(n: u8, val: &NaNBox) -> &'static [u8] {

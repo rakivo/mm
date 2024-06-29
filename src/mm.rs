@@ -5,12 +5,14 @@ pub mod flag;
 pub mod inst;
 pub mod trap;
 pub mod parser;
+pub mod comptime;
 
 pub use nan::*;
 pub use flag::*;
 pub use inst::*;
 pub use trap::*;
 pub use parser::*;
+pub use comptime::*;
 
 const DEBUG: bool = false;
 
@@ -409,6 +411,10 @@ impl Mm {
     }
 
     pub fn execute_program(&mut self, debug: bool, limit: Option::<usize>) -> MMResult<()> {
+        if self.program.is_empty() {
+            return Ok(())
+        }
+
         if DEBUG {
             time_msg("Started executing program");
         }
@@ -503,6 +509,7 @@ impl Mm {
 
 /* TODO:
     (#9) Implement lexer for the masm
+    (#10) Expand macros
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
     2. Introduce MasmTranslator struct, that translates masm and report errors proper way.

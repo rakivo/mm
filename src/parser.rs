@@ -5,7 +5,7 @@ use std::{
     collections::VecDeque,
     time::{SystemTime, UNIX_EPOCH, Duration}
 };
-use crate::{Mm, Inst, MTrap, Trap, MResult, Program, Labels, Flags, DEBUG, ENTRY_POINT};
+use crate::{Comptime, Macros, Flags, Inst, Labels, MResult, MTrap, Mm, Program, Trap, DEBUG, ENTRY_POINT};
 
 pub type MMResult<T> = std::result::Result::<T, MTrap>;
 
@@ -93,7 +93,11 @@ impl<'a> Parser<'a> {
     }
 
     fn parse(mut self) -> MResult::<Program> {
-        for (row, line) in self.iter.to_owned() {
+        if DEBUG {
+            time_msg("Started parsing");
+        }
+
+        while let Some((row, line)) = self.iter.next() {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with(';') { continue }
             self.parse_line(&line, row)?;
@@ -101,6 +105,10 @@ impl<'a> Parser<'a> {
 
         if matches!(self.program.last(), Some(last) if last.0 != Inst::HALT) {
             self.program.push((Inst::HALT, self.program.last().unwrap().1 + 1));
+        }
+
+        if DEBUG {
+            time_msg("Ended parsing");
         }
 
         Ok(self.program)
@@ -139,47 +147,43 @@ impl Mm {
     where
         Self: Sized
     {
-        let file = std::fs::read_to_string(&file_path).map_err(|err| {
+        let content = std::fs::read_to_string(&file_path).map_err(|err| {
             eprintln!("Failed to open file: {file_path}: {err}");
             err
         }).unwrap_or_report();
 
-        if DEBUG {
-            time_msg("Started parsing");
-        }
+        let mut macros = Macros::new();
+        let mut comptime = Comptime::new(&content, file_path, &mut macros);
+        comptime.parse_macros();
+        Ok(Mm::new(Program::new(), file_path))
+        // let parser = Parser::new(&file, file_path);
 
-        let parser = Parser::new(&file, file_path);
+        // let program = parser.parse().unwrap_or_report();
+        // let labels = Mm::process_labels(&program);
 
-        let program = parser.parse().unwrap_or_report();
-        let labels = Mm::process_labels(&program);
+        // let Some(entry_point) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT) else {
+        //     let trap = Trap::NoEntryPointFound(file_path.to_owned());
+        //     return Err(MTrap(trap, None))
+        // };
 
-        let Some(entry_point) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT) else {
-            let trap = Trap::NoEntryPointFound(file_path.to_owned());
-            return Err(MTrap(trap, None))
-        };
+        // comptime_labels_check(&program, &labels, file_path).unwrap_or_report();
 
-        comptime_labels_check(&program, &labels, file_path).unwrap_or_report();
+        // let mm = Mm {
+        //     file_path: file_path.to_owned(),
+        //     stack: VecDeque::with_capacity(Mm::STACK_CAP),
+        //     call_stack: if program.is_empty() {
+        //         VecDeque::with_capacity(Mm::CALL_STACK_CAP)
+        //     } else {
+        //         vec![program.len() - 1].into()
+        //     },
+        //     labels,
+        //     flags: Flags::new(),
+        //     program,
+        //     ip: entry_point.1,
+        //     halt: false
+        // };
 
-        if DEBUG {
-            time_msg("Ended parsing");
-        }
-
-        let mm = Mm {
-            file_path: file_path.to_owned(),
-            stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: if program.is_empty() {
-                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
-            } else {
-                vec![program.len() - 1].into()
-            },
-            labels,
-            flags: Flags::new(),
-            program,
-            ip: entry_point.1,
-            halt: false
-        };
-
-        Ok(mm)
+        // Ok(mm)
     }
 }
 
