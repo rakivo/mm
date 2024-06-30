@@ -6,3 +6,4 @@ generated.masm
 *.bin
 *.asm
 *.c
+cpp_version
