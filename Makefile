@@ -11,44 +11,24 @@ BUILD_DIR = ./build
 MMLIB_PATH = $(BUILD_DIR)/libmm.rlib
 
 all: examples
-examples: $(BUILD_DIR) $(BUILD_DIR)/libmm.rlib $(BUILD_DIR)/translate_masm $(BUILD_DIR)/gen_masm $(BUILD_DIR)/gen_from_bin $(BUILD_DIR)/masm_to_bin
+examples: $(BUILD_DIR) $(BUILD_DIR)/libmm.rlib $(BUILD_DIR)/masm $(BUILD_DIR)/demasm
 
-TRANSLATE = ./build/translate_masm
-GENERATE = ./build/gen_masm
-FROM_BIN = ./build/from_binary
-TO_BIN = ./build/to_binary
-BINARIES = $(EXAMPLES:%.masm=./build/%)
-
+MASM = ./build/masm
+DEMASM = ./build/demasm
 MASM_DIR = ./masm
-EXAMPLES = fib jumps adds func
-EXAMPLES_SRC = $(EXAMPLES:%=$(MASM_DIR)/%.masm)
-BINARIES = $(EXAMPLES:%=$(BUILD_DIR)/%)
 
 $(BUILD_DIR):
 	mkdir -p $@
-
-test_fib: test_fib_for_readme
-test_fib_for_readme: mm examples
-	$(TRANSLATE) $(MASM_DIR)/fib.masm
-
-$(BUILD_DIR)/%: $(MASM_DIR)/%.masm
-	$(TRANSLATE) $<
-
-test_examples: mm examples $(BINARIES)
-	$(foreach src,$(EXAMPLES_SRC),$(TRANSLATE) $(src);)
 
 mm: $(BUILD_DIR)/libmm.rlib
 $(BUILD_DIR)/libmm.rlib: src/mm.rs src/flag.rs src/inst.rs src/trap.rs src/nan.rs src/parser.rs src/comptime.rs
 	rustc $(RUST_FLAGS) $(LIB_FLAGS) -o $@ $<
 
-$(BUILD_DIR)/translate_masm: mm examples/translate_masm.rs
-	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/translate_masm.rs
+$(BUILD_DIR)/masm: mm masm.rs
+	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ masm.rs
 
-$(BUILD_DIR)/gen_from_bin: mm examples/gen_from_bin.rs
-	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/gen_from_bin.rs
-
-$(BUILD_DIR)/masm_to_bin: mm examples/masm_to_bin.rs
-	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ examples/masm_to_bin.rs
+$(BUILD_DIR)/demasm: mm demasm.rs
+	rustc $(RUST_FLAGS) --extern mm=$(MMLIB_PATH) -o $@ demasm.rs
 
 clean:
 	rm -f $(BUILD_DIR)/*
