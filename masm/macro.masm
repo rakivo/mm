@@ -8,5 +8,7 @@
 }
 
 _start:
-	write 34 35 +
-	halt
+    write 34 35 iadd
+    push 420
+    dmp SYS_STDOUT
+    halt

@@ -5,7 +5,7 @@ use std::{
     collections::VecDeque,
     time::{SystemTime, UNIX_EPOCH, Duration}
 };
-use crate::{Comptime, Macros, Flags, Inst, Labels, MResult, MTrap, Mm, Program, Trap, DEBUG, ENTRY_POINT};
+use crate::{process_content, Comptime, Flags, Inst, Labels, MResult, MTrap, Mm, Program, Trap, DEBUG, ENTRY_POINT};
 
 pub type MMResult<T> = std::result::Result::<T, MTrap>;
 
@@ -44,7 +44,6 @@ pub fn time_msg(msg: &str) {
 
 struct Parser<'a> {
     iter: Enumerate::<Lines<'a>>,
-
     program: Program,
     file_path: &'a str
 }
@@ -59,9 +58,6 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_labels(&mut self, line: &'a str, row: usize) -> MResult::<()> {
-        // label1, label2:
-        //     ...
-
         let splitted = line.split_whitespace().collect::<Vec::<_>>();
         assert!(splitted.len() == 1, "{f}:{r}: Scheisse is NOT allowed here", f = self.file_path, r = row + 1);
 
@@ -152,38 +148,41 @@ impl Mm {
             err
         }).unwrap_or_report();
 
-        let mut macros = Macros::new();
-        let mut comptime = Comptime::new(&content, file_path, &mut macros);
-        comptime.parse_macros();
-        Ok(Mm::new(Program::new(), file_path))
-        // let parser = Parser::new(&file, file_path);
+        let mut ct = Comptime::new(&content, file_path);
+        let content = ct.parse_macros();
 
-        // let program = parser.parse().unwrap_or_report();
-        // let labels = Mm::process_labels(&program);
+        let macros = ct.macros;
 
-        // let Some(entry_point) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT) else {
-        //     let trap = Trap::NoEntryPointFound(file_path.to_owned());
-        //     return Err(MTrap(trap, None))
-        // };
+        let content = process_content(&macros, &content);
 
-        // comptime_labels_check(&program, &labels, file_path).unwrap_or_report();
+        let parser = Parser::new(&content, file_path);
 
-        // let mm = Mm {
-        //     file_path: file_path.to_owned(),
-        //     stack: VecDeque::with_capacity(Mm::STACK_CAP),
-        //     call_stack: if program.is_empty() {
-        //         VecDeque::with_capacity(Mm::CALL_STACK_CAP)
-        //     } else {
-        //         vec![program.len() - 1].into()
-        //     },
-        //     labels,
-        //     flags: Flags::new(),
-        //     program,
-        //     ip: entry_point.1,
-        //     halt: false
-        // };
+        let program = parser.parse().unwrap_or_report();
+        let labels = Mm::process_labels(&program);
 
-        // Ok(mm)
+        let Some(entry_point) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT) else {
+            let trap = Trap::NoEntryPointFound(file_path.to_owned());
+            return Err(MTrap(trap, None))
+        };
+
+        comptime_labels_check(&program, &labels, file_path).unwrap_or_report();
+
+        let mm = Mm {
+            file_path: file_path.to_owned(),
+            stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            call_stack: if program.is_empty() {
+                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
+            } else {
+                vec![program.len() - 1].into()
+            },
+            labels,
+            flags: Flags::new(),
+            program,
+            ip: entry_point.1,
+            halt: false
+        };
+
+        Ok(mm)
     }
 }
 

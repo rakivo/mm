@@ -509,7 +509,7 @@ impl Mm {
 
 /* TODO:
     (#9) Implement lexer for the masm
-    (#10) Expand macros
+    (#10) Expand Macros
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
     2. Introduce MasmTranslator struct, that translates masm and report errors proper way.
