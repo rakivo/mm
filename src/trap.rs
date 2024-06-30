@@ -13,7 +13,7 @@ pub enum Trap {
     UndefinedSymbol(String),
     InvalidLabel(String, String),
     InvalidFunction(String, String),
-    DivisionOfDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
+    OperationWithDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
 }
 
 impl std::fmt::Debug for Trap {
@@ -33,7 +33,7 @@ impl std::fmt::Debug for Trap {
             InvalidFunction(func, reason)      => write!(f, "Invalid function: `{func}`: {reason}"),
             NoEntryPointFound(file_path)       => write!(f, "No entry point found in: {file_path}"),
             IllegalInstructionAccess           => write!(f, "Illegal instruction access"),
-            DivisionOfDifferentTypes(ty1, ty2) => write!(f, "Can't divide different types, type 1: {ty1:?}, type 2: {ty2:?}")
+            OperationWithDifferentTypes(ty1, ty2) => write!(f, "Can't perform an operation with two different types, type 1: {ty1:?}, type 2: {ty2:?}")
         }
     }
 }

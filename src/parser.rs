@@ -1,11 +1,7 @@
 use std::{
-    str::Lines,
-    process::exit,
-    iter::Enumerate,
-    collections::VecDeque,
-    time::{SystemTime, UNIX_EPOCH, Duration}
+    collections::VecDeque, iter::Enumerate, process::exit, str::Lines, time::Instant
 };
-use crate::{process_content, Comptime, Flags, Inst, Labels, MResult, MTrap, Mm, Program, Trap, DEBUG, ENTRY_POINT};
+use crate::{process_content, Comptime, Flags, Inst, Labels, MResult, MTrap, Mm, Program, Trap, ENTRY_POINT};
 
 pub type MMResult<T> = std::result::Result::<T, MTrap>;
 
@@ -19,26 +15,6 @@ impl std::fmt::Debug for MTrap {
         } else {
             write!(f, "{trap:?}")
         }
-    }
-}
-
-pub fn time_msg(msg: &str) {
-    let now = SystemTime::now();
-    if let Ok(dur) = now.duration_since(UNIX_EPOCH) {
-        let secs_ = dur.as_secs();
-        let nans_ = dur.subsec_nanos();
-
-        let dt_secs = (UNIX_EPOCH + Duration::new(secs_, nans_)).duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_secs();
-
-        let rem_secs = dt_secs % 86400;
-        let hrs = rem_secs / 3600;
-        let rem_secs = rem_secs % 3600;
-        let mins = rem_secs / 60;
-        let secs = rem_secs % 60;
-
-        println!("{msg} at: {hrs:02}:{mins:02}:{secs:02}")
     }
 }
 
@@ -89,10 +65,6 @@ impl<'a> Parser<'a> {
     }
 
     fn parse(mut self) -> MResult::<Program> {
-        if DEBUG {
-            time_msg("Started parsing");
-        }
-
         while let Some((row, line)) = self.iter.next() {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with(';') { continue }
@@ -101,10 +73,6 @@ impl<'a> Parser<'a> {
 
         if matches!(self.program.last(), Some(last) if last.0 != Inst::HALT) {
             self.program.push((Inst::HALT, self.program.last().unwrap().1 + 1));
-        }
-
-        if DEBUG {
-            time_msg("Ended parsing");
         }
 
         Ok(self.program)
@@ -148,6 +116,8 @@ impl Mm {
             err
         }).unwrap_or_report();
 
+        let time = Instant::now();
+
         let mut ct = Comptime::new(&content, file_path);
         let content = ct.parse_macros();
 
@@ -166,6 +136,9 @@ impl Mm {
         };
 
         comptime_labels_check(&program, &labels, file_path).unwrap_or_report();
+
+        let elapsed = time.elapsed().as_micros();
+        println!("Parsing and comptime checks took: {elapsed} microseconds");
 
         let mm = Mm {
             file_path: file_path.to_owned(),

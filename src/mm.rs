@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{time::Instant, collections::VecDeque};
 
 pub mod nan;
 pub mod flag;
@@ -134,7 +134,7 @@ impl Mm {
 
         let prelast = self.stack.back_mut().unwrap();
         let Some(b) = last.get_f64() else {
-            return Err(Trap::DivisionOfDifferentTypes(prelast.get_type(), last.get_type()))
+            return Err(Trap::OperationWithDifferentTypes(prelast.get_type(), last.get_type()))
         };
 
         use Inst::*;
@@ -154,7 +154,7 @@ impl Mm {
 
         let prelast = self.stack.back_mut().unwrap();
         let (Some(a), Some(b)) = (prelast.get_u64(), last.get_u64()) else {
-            return Err(Trap::DivisionOfDifferentTypes(prelast.get_type(), last.get_type()))
+            return Err(Trap::OperationWithDifferentTypes(prelast.get_type(), last.get_type()))
         };
 
         use Inst::*;
@@ -415,9 +415,7 @@ impl Mm {
             return Ok(())
         }
 
-        if DEBUG {
-            time_msg("Started executing program");
-        }
+        let time = Instant::now();
 
         let mut count = 0;
         let limit = limit.unwrap_or(usize::MAX);
@@ -434,9 +432,8 @@ impl Mm {
             count += 1;
         }
 
-        if DEBUG {
-            time_msg("Ended executing program");
-        }
+        let elapsed = time.elapsed().as_micros();
+        println!("Execution of the program took: {elapsed} microseconds");
 
         Ok(())
     }
