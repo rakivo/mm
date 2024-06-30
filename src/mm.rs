@@ -442,9 +442,14 @@ impl Mm {
         use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
+        let time = Instant::now();
+
         for (inst, _) in self.program.iter() {
             f.write_all(&inst.as_bytes())?;
         }
+
+        let elapsed = time.elapsed().as_micros();
+        println!("Compiling to binary took: {elapsed} microseconds");
 
         Ok(())
     }
@@ -456,6 +461,8 @@ impl Mm {
             eprintln!("Failed to read file: {file_path}: {err}");
             err
         }).unwrap();
+
+        let time = Instant::now();
 
         let (mut i, mut ip, mut program, mut labels) = (0, 0, Program::new(), Labels::new());
         while i < buf.len() {
@@ -472,6 +479,9 @@ impl Mm {
         if matches!(program.last(), Some(last) if last.0 != Inst::HALT) {
             program.push((Inst::HALT, ip + 1));
         }
+
+        let elapsed = time.elapsed().as_micros();
+        println!("Compiling from binary took: {elapsed} microseconds");
 
         let mm = Mm {
             file_path: file_path.to_owned(),
@@ -495,10 +505,15 @@ impl Mm {
         use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
+        let time = Instant::now();
+
         for inst in self.program.iter() {
             let inst_str = format!("{inst}\n", inst = String::from(&inst.0));
             f.write_all(&inst_str.as_bytes())?;
         }
+
+        let elapsed = time.elapsed().as_micros();
+        println!("Generation took: {elapsed} microseconds");
 
         Ok(())
     }

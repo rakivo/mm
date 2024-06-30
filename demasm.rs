@@ -1,18 +1,43 @@
-use std::env;
+use std::{env, process::exit};
 
 extern crate mm;
 use mm::*;
 
-fn main() -> std::io::Result<()> {
+fn find_flag(args: &Vec::<String>, flag: &str) -> Option::<String> {
+    if let Some(pos) = args.iter().position(|x| x == flag) {
+        if args.len() < pos + 1 {
+            panic!("No expected argument for flag: {f}", f = args[pos]);
+        } else if args.len() > pos + 1 {
+            if args[pos + 1].starts_with('-') {
+                panic!("Unxpected argument for flag: {f}: {a}", f = args[pos], a = args[pos + 1]);
+            } else {
+                Some(args[pos + 1].to_owned())
+            }
+        } else {
+            None
+        }
+    } else { None }
+}
+
+fn main() {
     let args = env::args().collect::<Vec<_>>();
-    if args.len() != 3 {
-        eprintln!("USAGE: {prog} <input> <output>", prog = args[0]);
-        return Ok(())
+    if args.len() < 2 {
+        eprintln!("USAGE: {prog} <input> [-o <output>] [-l <limit>] [-d]", prog = args[0]);
+        exit(1)
     }
 
-    let input_path = &args[1];
-    let output_path = &args[2];
+    let input = &args[1];
+    let mut mm = Mm::from_binary(input).unwrap_or_report();
 
-    let mm = Mm::from_binary(input_path).unwrap_or_report();
-    mm.generate_masm(output_path)
+    let debug = args.contains(&"-d".to_owned());
+    let output = find_flag(&args, "-o");
+    let limit = find_flag(&args, "-l").map(|x| x.parse::<usize>().map_err(|err| {
+        panic!("Failed to parse argument for flag: -l: {err}")
+    }).unwrap());
+
+    if let Some(out) = output {
+        mm.generate_masm(&out).unwrap_or_report();
+    } else {
+        mm.execute_program(debug, limit).unwrap_or_report();
+    }
 }

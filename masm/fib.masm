@@ -1,10 +1,15 @@
+_start:
 ; First fibonacci numbers:
     push 0
     push 1
 
+; Main loop:
 .loop:
     dup 1
     dup 1
-    add
-    cmp 100000000
+    iadd
+    cmp 100000
+    dmp 1
     jl .loop
+
+    halt
