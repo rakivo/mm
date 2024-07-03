@@ -4,6 +4,7 @@ use std::{
     borrow::Cow,
     fmt::Display,
     process::exit,
+    collections::HashMap,
     iter::{Enumerate, Peekable},
 };
 
@@ -15,11 +16,29 @@ mod lexer {
 
 pub type Loc = (usize, usize);
 pub type Tokens<'a> = Vec::<Token<'a>>;
+pub type ETokens<'a> = Vec::<EToken<'a>>;
 pub type Labels<'a> = Vec::<(Token<'a>, Tokens<'a>)>;
+pub type MacrosMap<'a> = HashMap::<String, Token<'a>>;
+pub type Iterator<'a> = Peekable<std::vec::IntoIter<Token<'a>>>;
 
 const QUOTE: &str = "\"";
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug)]
+pub enum EToken<'a> {
+    Token(Token<'a>),
+    Expansion(Cow<'a, str>)
+}
+
+impl Display for EToken<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EToken::Token(t) => t.fmt(f),
+            EToken::Expansion(val) => write!(f, "{val}")
+        }
+    }
+}
+
+#[derive(Eq, Hash, Debug, Clone, PartialEq)]
 pub enum PpType<'a> {
     Include,
     SingleLine {
@@ -31,7 +50,7 @@ pub enum PpType<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Eq, Hash, Debug, Clone, PartialEq)]
 pub enum TokenType<'a> {
     Float,
     Label,
@@ -41,7 +60,7 @@ pub enum TokenType<'a> {
     Pp(PpType<'a>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Eq, Hash, Debug, Clone, PartialEq)]
 pub struct Token<'a> {
     loc: Loc,
     typ: TokenType<'a>,
@@ -49,34 +68,88 @@ pub struct Token<'a> {
 }
 
 impl Display for Token<'_> {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{r}:{c}: {t:?}:{v}", r = self.loc.0 + 1, c = self.loc.1 + 1, t = self.typ, v = self.val)
     }
 }
 
 impl<'a> Token<'a> {
-    pub fn new(loc: Loc, typ: TokenType<'a>, val: std::borrow::Cow<'a, str>) -> Self {
+    pub fn new(loc: Loc, typ: TokenType<'a>, val: Cow<'a, str>) -> Self {
         Self { loc, typ, val }
     }
 }
 
 pub struct Lexer<'a> {
     ts: Tokens<'a>,
-    iter: Enumerate::<Peekable::<Lines<'a>>>,
+    mm: MacrosMap<'a>,
     file_path: &'a str,
+    iter: Enumerate::<Peekable::<Lines<'a>>>,
 }
 
 impl<'a> Lexer<'a> {
+    #[inline(always)]
     pub fn ts(&self) -> &Tokens {
         &self.ts
     }
 
     pub fn new(file_path: &'a str, content: &'a str) -> Self {
         Self {
-            ts: Vec::new(),
-            iter: content.lines().peekable().enumerate(),
+            ts: Tokens::new(),
+            mm: MacrosMap::new(),
             file_path,
+            iter: content.lines().peekable().enumerate(),
         }
+    }
+
+    fn match_token(iter: &mut Iterator<'a>, mm: &MacrosMap<'a>, t: Token<'a>, ets: &mut ETokens<'a>) {
+        use { TokenType::*, PpType::* };
+
+        match &t.typ {
+            Pp(_) => {}
+            _ => if let Some(m) = mm.get(&t.val.to_string()) {
+                match &m.typ {
+                    Pp(pp) => match pp {
+                        Include => todo!(),
+                        SingleLine { value } => ets.push(EToken::Expansion(value.to_owned())),
+                        MultiLine { body, args } => {
+                            let prev_row = t.loc.0;
+                            let mut args_ = Vec::new();
+                            while let Some(t) = iter.peek().cloned() {
+                                if prev_row != t.loc.0 { break }
+                                args_.push(t);
+                                iter.next();
+                            }
+
+                            assert!(args_.len() == args.len(), "Args count must be equal to args count required in the macro, got: {g}, required: {r}, macro's name: {n}", g = args_.len(), r = args.len(), n = m.val);
+                            let args_map = args.iter().map(|t| &t.val).zip(&args_).collect::<HashMap::<_, _>>();
+                            for t_ in body.iter() {
+                                if let Some(value) = args_map.get(&t_.val) {
+                                    ets.push(EToken::Token((**value).to_owned()))
+                                } else {
+                                    ets.push(EToken::Token(t_.to_owned()));
+                                }
+                            }
+                        }
+                    }
+                    _ => unreachable!()
+                }
+            } else {
+                ets.push(EToken::Token(t))
+            }
+        }
+    }
+
+    pub fn expand_macros(self) -> ETokens<'a> {
+        let mm = self.mm;
+        let mut ets = ETokens::new();
+        let mut iter = self.ts.into_iter().peekable();
+
+        while let Some(t) = iter.next() {
+            Self::match_token(&mut iter, &mm, t, &mut ets);
+        }
+
+        ets
     }
 
     fn split_whitespace_preserve_indices(input: &str) -> lexer::Iterator {
@@ -168,12 +241,12 @@ impl<'a> Lexer<'a> {
                 .skip_while(|x| *x == "#")
                 .take(1)
                 .collect::<Vec::<_>>()
-                .join(" ")
-                .into();
+                .join(" ");
 
             let col = line.find(|x| x == '#').unwrap();
             let loc = (row, col);
-            let t = Token::new(loc, typ, name);
+            let t = Token::new(loc, typ, name.to_owned().into());
+            self.mm.insert(name, t.to_owned());
             self.ts.push(t);
             true
         } else {
@@ -195,27 +268,24 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn match_token(&mut self, currt: &'a str, currloc: Loc) {
-        let typ = Self::type_token(currt);
-        let t = if typ == TokenType::Label {
-            Token::new(currloc, typ, currt[..currt.len() - 1].into())
-        } else {
-            Token::new(currloc, typ, currt.into())
-        };
-        self.ts.push(t);
-    }
-
     fn lex_line(&mut self, line: &'a str, row: usize) {
         let mut iter = Self::split_whitespace_preserve_indices(&line).peekable();
 
         while let Some((col, t)) = iter.next() {
-            self.match_token(t, (row, col))
+            let loc = (row, col);
+            let typ = Self::type_token(t);
+            let token = if typ == TokenType::Label {
+                Token::new(loc, typ, t[..t.len() - 1].into())
+            } else {
+                Token::new(loc, typ, t.into())
+            };
+            self.ts.push(token);
         }
     }
 
     pub fn lex_file(&mut self) {
         while let Some((row, line)) = self.iter.next() {
-            if !self.check_for_macros(line, row) {
+            if !line.trim().is_empty() && !self.check_for_macros(line, row) {
                 self.lex_line(line, row)
             }
         }
@@ -234,7 +304,9 @@ fn main() -> std::io::Result<()> {
     let mut lexer = Lexer::new(input, &content);
 
     lexer.lex_file();
-    for t in lexer.ts() {
+
+    let ets = lexer.expand_macros();
+    for t in ets {
         println!("{f}:{t}", f = input);
     }
 
