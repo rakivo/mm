@@ -118,42 +118,25 @@ impl Mm {
 
         let time = Instant::now();
 
-        let mut ct = Comptime::new(&content, file_path);
-        let content = ct.parse_macros();
-
-        let macros = ct.macros;
-
-        let content = process_content(&macros, &content);
-
-        let parser = Parser::new(&content, file_path);
-
-        let program = parser.parse().unwrap_or_report();
-        let labels = Mm::process_labels(&program);
-
-        let Some(entry_point) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT) else {
-            let trap = Trap::NoEntryPointFound(file_path.to_owned());
-            return Err(MTrap(trap, None))
-        };
-
-        comptime_labels_check(&program, &labels, file_path).unwrap_or_report();
+        
 
         let elapsed = time.elapsed().as_micros();
         println!("Parsing and comptime checks took: {elapsed} microseconds");
 
-        let mm = Mm {
-            file_path: file_path.to_owned(),
-            stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: if program.is_empty() {
-                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
-            } else {
-                vec![program.len() - 1].into()
-            },
-            labels,
-            flags: Flags::new(),
-            program,
-            ip: entry_point.1,
-            halt: false
-        };
+        // let mm = Mm {
+        //     file_path: file_path.to_owned(),
+        //     stack: VecDeque::with_capacity(Mm::STACK_CAP),
+        //     call_stack: if program.is_empty() {
+        //         VecDeque::with_capacity(Mm::CALL_STACK_CAP)
+        //     } else {
+        //         vec![program.len() - 1].into()
+        //     },
+        //     labels,
+        //     flags: Flags::new(),
+        //     program,
+        //     ip: entry_point.1,
+        //     halt: false
+        // };
 
         Ok(mm)
     }

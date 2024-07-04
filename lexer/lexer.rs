@@ -121,7 +121,7 @@ impl<'a> Lexer<'a> {
                                 iter.next();
                             }
 
-                            assert!(args_.len() == args.len(), "Args count must be equal to args count required in the macro, got: {g}, required: {r}, macro's name: {n}", g = args_.len(), r = args.len(), n = m.val);
+                            assert!(args_.len() == args.len(), "{ro}:{c}: Args count must be equal to the args count required in the macro, got: {g}, required: {r}, macro's name: {n}", ro = prev_row + 1, c = t.loc.1, g = args_.len(), r = args.len(), n = m.val);
                             let args_map = args.iter().map(|t| &t.val).zip(&args_).collect::<HashMap::<_, _>>();
                             for t_ in body.iter() {
                                 if let Some(value) = args_map.get(&t_.val) {
