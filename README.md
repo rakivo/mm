@@ -21,12 +21,6 @@ $ make && ./build/masm ./masm/macro.masm
     dmp out
 }
 
-; And when I implement including files, you can use it with the following syntax:
-; ```
-; #"file.hasm"
-; ```
-; Pretty neat syntax, isn't it?
-
 ; `_start` is the default entry point, which, for now, you can't change.
 _start:
     write 34 35 iadd SYS_STDOUT
