@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use crate::{NaNBox, Word, Trap, print_oper_f};
+use crate::{NaNBox, Trap, print_oper_f};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstType {
@@ -42,6 +42,30 @@ pub enum InstType {
     RET,
 
     HALT,
+}
+
+impl InstType {
+    #[inline]
+    pub fn is_arg_required(&self) -> bool {
+        match self {
+              InstType::PUSH
+            | InstType::CMP
+            | InstType::DUP
+            | InstType::JE
+            | InstType::JL
+            | InstType::JNGE
+            | InstType::JG
+            | InstType::JNLE
+            | InstType::JNE
+            | InstType::JZ
+            | InstType::JNZ
+            | InstType::JMP
+            | InstType::LABEL
+            | InstType::DMP
+            | InstType::CALL => true,
+            _ => false
+        }
+    }
 }
 
 impl TryFrom::<&Cow<'_, str>> for InstType {
@@ -89,7 +113,8 @@ impl TryFrom::<&Cow<'_, str>> for InstType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstValue {
     U8(u8),
-    Word(Word),
+    F64(NaNBox),
+    U64(NaNBox),
     String(String),
     None
 }
@@ -104,9 +129,17 @@ impl InstValue {
     }
 
     #[inline]
-    pub fn get_word(&self) -> Option::<Word> {
+    pub fn get_word(&self) -> Option::<NaNBox> {
         match self {
-            InstValue::Word(word) => Some(*word),
+            InstValue::U64(word) => Some(*word),
+            _ => None
+        }
+    }
+
+    #[inline]
+    pub fn get_nan(&self) -> Option::<NaNBox> {
+        match self {
+            InstValue::F64(nan) => Some(*nan),
             _ => None
         }
     }
@@ -127,8 +160,14 @@ impl InstValue {
 
     #[inline]
     #[track_caller]
-    pub fn word(&self) -> Word {
+    pub fn word(&self) -> NaNBox {
         self.get_word().unwrap()
+    }
+
+    #[inline]
+    #[track_caller]
+    pub fn nan(&self) -> NaNBox {
+        self.get_nan().unwrap()
     }
 
     #[inline]
@@ -144,6 +183,31 @@ pub struct Inst {
     pub val: InstValue
 }
 
+impl TryFrom::<InstType> for Inst {
+    type Error = ();
+
+    fn try_from(typ: InstType) -> Result<Self, Self::Error> {
+        match typ {
+            InstType::NOP  => Ok(Self::NOP),
+            InstType::POP  => Ok(Self::POP),
+            InstType::INC  => Ok(Self::INC),
+            InstType::DEC  => Ok(Self::DEC),
+            InstType::IADD => Ok(Self::IADD),
+            InstType::ISUB => Ok(Self::ISUB),
+            InstType::IMUL => Ok(Self::IMUL),
+            InstType::IDIV => Ok(Self::IDIV),
+            InstType::FADD => Ok(Self::FADD),
+            InstType::FSUB => Ok(Self::FSUB),
+            InstType::FMUL => Ok(Self::FMUL),
+            InstType::FDIV => Ok(Self::FDIV),
+            InstType::SWAP => Ok(Self::SWAP),
+            InstType::BOT  => Ok(Self::BOT),
+            InstType::HALT => Ok(Self::HALT),
+            _ => Err(())
+        }
+    }
+}
+
 impl Inst {
     pub const NOP:  Self = Self { typ: InstType::NOP,  val: InstValue::None };
     pub const POP:  Self = Self { typ: InstType::POP,  val: InstValue::None };
@@ -153,10 +217,10 @@ impl Inst {
     pub const ISUB: Self = Self { typ: InstType::ISUB, val: InstValue::None };
     pub const IMUL: Self = Self { typ: InstType::IMUL, val: InstValue::None };
     pub const IDIV: Self = Self { typ: InstType::IDIV, val: InstValue::None };
-    pub const FADD: Self = Self { typ: InstType::IADD, val: InstValue::None };
-    pub const FSUB: Self = Self { typ: InstType::ISUB, val: InstValue::None };
-    pub const FMUL: Self = Self { typ: InstType::IMUL, val: InstValue::None };
-    pub const FDIV: Self = Self { typ: InstType::IDIV, val: InstValue::None };
+    pub const FADD: Self = Self { typ: InstType::FADD, val: InstValue::None };
+    pub const FSUB: Self = Self { typ: InstType::FSUB, val: InstValue::None };
+    pub const FMUL: Self = Self { typ: InstType::FMUL, val: InstValue::None };
+    pub const FDIV: Self = Self { typ: InstType::FDIV, val: InstValue::None };
     pub const SWAP: Self = Self { typ: InstType::SWAP, val: InstValue::None };
     pub const BOT:  Self = Self { typ: InstType::BOT,  val: InstValue::None };
     pub const HALT: Self = Self { typ: InstType::HALT, val: InstValue::None };
@@ -196,24 +260,6 @@ impl Inst {
         "call",
         "ret",
         "halt"
-    ];
-
-    pub const ARG_REQUIRED: &'static [InstType] = &[
-        InstType::PUSH,
-        InstType::CMP,
-        InstType::DUP,
-        InstType::JE,
-        InstType::JL,
-        InstType::JNGE,
-        InstType::JG,
-        InstType::JNLE,
-        InstType::JNE,
-        InstType::JZ,
-        InstType::JNZ,
-        InstType::JMP,
-        InstType::LABEL,
-        InstType::DMP,
-        InstType::CALL,
     ];
 }
 
@@ -259,7 +305,7 @@ macro_rules! inst_from_bytes {
             let a = nan_from_bytes(&$b);
             let inst = Inst {
                 typ: InstType::$ret,
-                val: InstValue::Word(a)
+                val: InstValue::U64(a)
             };
 
             Ok((inst, 9))
@@ -442,7 +488,7 @@ impl std::fmt::Display for Inst {
         use InstType::*;
         match self.typ {
             NOP   => write!(f, "Instruction: `NOP`"),
-            PUSH  => { write!(f, "Instruction: `PUSH`, operand: ")?; print_oper_f(f, &self.val.word()) }
+            PUSH  => { write!(f, "Instruction: `PUSH`, operand: ")?; print_oper_f(f, &self.val.nan()) }
             POP   => write!(f, "Instruction: `POP`"),
             INC   => write!(f, "Instruction: `INC`"),
             DEC   => write!(f, "Instruction: `DEC`"),

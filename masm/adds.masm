@@ -8,7 +8,7 @@
 }
 
 _start:
-    write 34 35 iadd SYS_STDOUT
+    write 666 246 isub 1
     jmp faddin
 
 faddin:

@@ -18,17 +18,16 @@ const DEBUG: bool = false;
 
 const ENTRY_POINT: &str = "_start";
 
-pub type Word = NaNBox;
 pub type MResult<T> = std::result::Result<T, Trap>;
 
-pub type Program = Vec<(Inst, Loc)>;
+pub type Program = Vec<(Loc, Inst)>;
 
 pub type Labels = std::collections::HashMap<String, usize>;
 
 pub struct Mm {
     pub file_path: String,
 
-    stack: VecDeque::<Word>,
+    stack: VecDeque::<NaNBox>,
     call_stack: VecDeque::<usize>,
 
     labels: Labels,
@@ -39,7 +38,7 @@ pub struct Mm {
 }
 
 #[inline]
-fn print_oper_f(f: &mut std::fmt::Formatter<'_>, oper: &Word) -> std::fmt::Result {
+fn print_oper_f(f: &mut std::fmt::Formatter<'_>, oper: &NaNBox) -> std::fmt::Result {
     match oper.get_type().unwrap() {
         Type::F64 => write!(f, "{f}", f = oper.as_f64()),
         Type::I64 => write!(f, "{f}", f = oper.as_i64()),
@@ -49,7 +48,7 @@ fn print_oper_f(f: &mut std::fmt::Formatter<'_>, oper: &Word) -> std::fmt::Resul
 }
 
 #[inline]
-fn print_oper_s<S>(mut s: S, oper: &Word) -> std::io::Result::<()>
+fn print_oper_s<S>(mut s: S, oper: &NaNBox) -> std::io::Result::<()>
 where
     S: std::io::Write
 {
@@ -98,7 +97,7 @@ impl Mm {
     const CALL_STACK_CAP: usize = 8 * 128;
 
     fn process_labels(program: &Program) -> Labels {
-        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (inst, _)| {
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (_, inst)| {
             match inst.typ {
                 InstType::LABEL => { labels.insert(inst.val.string().to_owned(), ip); }
                 _ => {}
@@ -129,27 +128,24 @@ impl Mm {
         &self.halt
     }
 
-    fn two_opers_finst(&mut self, inst: InstType, last: Word) -> MResult<()> {
+    fn two_opers_finst(&mut self, inst: InstType, last: NaNBox) -> MResult<()> {
         assert!(self.stack.len() > 0);
 
         let prelast = self.stack.back_mut().unwrap();
-        let Some(b) = last.get_f64() else {
-            return Err(Trap::OperationWithDifferentTypes(prelast.get_type(), last.get_type()))
-        };
 
         use InstType::*;
         match inst {
-            FADD => prelast.0 += b,
-            FSUB => prelast.0 -= b,
-            FMUL => prelast.0 *= b,
-            FDIV => prelast.0 /= b,
+            FADD => prelast.0 += last.0,
+            FSUB => prelast.0 -= last.0,
+            FMUL => prelast.0 *= last.0,
+            FDIV => prelast.0 /= last.0,
             _ => unreachable!(),
         }
 
         Ok(())
     }
 
-    fn two_opers_iinst(&mut self, inst: InstType, last: Word) -> MResult<()> {
+    fn two_opers_iinst(&mut self, inst: InstType, last: NaNBox) -> MResult<()> {
         assert!(self.stack.len() > 0);
 
         let prelast = self.stack.back_mut().unwrap();
@@ -159,12 +155,12 @@ impl Mm {
 
         use InstType::*;
         match inst {
-            IADD => { *prelast = Word::from_u64(a + b); }
-            ISUB => { *prelast = Word::from_u64(a - b); }
-            IMUL => { *prelast = Word::from_u64(a * b); }
+            IADD => { *prelast = NaNBox::from_u64(a + b); }
+            ISUB => { *prelast = NaNBox::from_u64(a - b); }
+            IMUL => { *prelast = NaNBox::from_u64(a * b); }
             IDIV => {
                 if b != 0 {
-                    *prelast = Word::from_u64(a / b);
+                    *prelast = NaNBox::from_u64(a / b);
                 } else {
                     return Err(Trap::DivisionByZero(inst))
                 }
@@ -243,7 +239,7 @@ impl Mm {
             NOP => Ok(()),
 
             PUSH => {
-                let oper = inst.val.word();
+                let oper = inst.val.nan();
                 if self.stack.len() < Mm::STACK_CAP {
                     self.stack.push_back(oper);
                     self.ip += 1;
@@ -427,9 +423,9 @@ impl Mm {
         let file_path: Cow<str> = self.file_path.to_owned().into();
         let limit = limit.unwrap_or(usize::MAX);
         while !self.halt() && count < limit {
-            let (inst, row) = self.program[self.ip].to_owned();
+            let (loc, inst) = self.program[self.ip].to_owned();
             self.execute_instruction(inst).map_err(|trap| {
-                MTrap::from((file_path.to_owned(), row, trap))
+                MTrap::from((file_path.to_owned(), loc, trap))
             })?;
 
             if debug {
@@ -451,7 +447,7 @@ impl Mm {
         let mut f = File::create(file_path)?;
         let time = Instant::now();
 
-        for (inst, _) in self.program.iter() {
+        for (_, inst) in self.program.iter() {
             f.write_all(&inst.as_bytes())?;
         }
 
@@ -478,14 +474,14 @@ impl Mm {
                 InstType::LABEL => { labels.insert(inst.val.string().to_owned(), ip); }
                 _ => {}
             };
-            program.push((inst, (ip, 69)));
+            program.push(((ip, 69), inst));
             ip += 1;
             i += size;
         }
 
-        if matches!(program.last(), Some(last) if last.0.typ != InstType::HALT) {
+        if matches!(program.last(), Some(last) if last.1.typ != InstType::HALT) {
             let inst = Inst { typ: InstType::HALT, val: InstValue::None };
-            program.push((inst, (ip + 1, 69)));
+            program.push(((ip + 1, 69), inst));
         }
 
         let elapsed = time.elapsed().as_micros();
@@ -495,7 +491,7 @@ impl Mm {
             file_path: file_path.to_owned(),
             stack: VecDeque::with_capacity(Mm::STACK_CAP),
             call_stack: if let Some(last) = program.last() {
-                vec![last.1.0].into()
+                vec![last.0.0].into()
             } else {
                 VecDeque::with_capacity(Mm::CALL_STACK_CAP)
             },
@@ -516,7 +512,7 @@ impl Mm {
         let time = Instant::now();
 
         for inst in self.program.iter() {
-            let inst_str = format!("{inst}\n", inst = String::from(&inst.0));
+            let inst_str = format!("{inst}\n", inst = String::from(&inst.1));
             f.write_all(&inst_str.as_bytes())?;
         }
 

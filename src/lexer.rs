@@ -1,9 +1,7 @@
 use std::{
-    env,
     str::Lines,
     borrow::Cow,
     fmt::Display,
-    process::exit,
     collections::HashMap,
     iter::{Enumerate, Peekable},
 };
