@@ -9,18 +9,13 @@ $ make && ./build/masm ./masm/macro.masm
 
 # Quick example of masm with macros:
 ```asm
-#SYS_STDOUT 1
-
-#write arg1 arg2 operation {
+#write arg1 arg2 oper out {
     push arg1
     push arg2
-    operation
-    dmp SYS_STDOUT
+    oper
+    dmp out
 }
 
 _start:
-    write 34 35 iadd
-    push 420
-    dmp SYS_STDOUT
-    halt
+    write 666 246 isub 1
 ```
