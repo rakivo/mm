@@ -1,14 +1,22 @@
+; You can define constants like in C.
 #SYS_STDOUT 1
 
-#write arg1 arg2 operation {
+; Here is a showcase of how you can define a macro with a body.
+; 'write' is the name, and everything before '{' is considered to be arguments of the macro.
+#write arg1 arg2 operation out {
     push arg1
     push arg2
     operation
-    dmp SYS_STDOUT
+    dmp out
 }
 
+; And when I implement including files, you can use it with the following syntax:
+; ```
+; #"file.hasm"
+; ```
+; Pretty neat syntax, isn't it?
+
+; `_start` is the default entry point, which, for now, you can't change.
 _start:
-    write 34 35 iadd
-    push 420
-    dmp SYS_STDOUT
-    halt
+    write 34 35 iadd SYS_STDOUT
+    ret

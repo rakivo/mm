@@ -1,8 +1,8 @@
 use std::{
     borrow::Cow,
-    collections::VecDeque, process::exit, time::Instant
+    collections::{VecDeque, HashMap}, process::exit, time::Instant
 };
-use crate::{NaNBox, Inst, EToken, Flags, InstType, InstValue, Labels, Lexer, MTrap, Mm, Program, TokenType, Trap, ENTRY_POINT};
+use crate::{PpType, Token, NaNBox, Inst, EToken, Flags, InstType, InstValue, Labels, Lexer, MTrap, Mm, Program, TokenType, Trap, ENTRY_POINT};
 
 pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
 
@@ -33,6 +33,18 @@ fn comptime_labels_check<'a>(program: &Program, labels: &Labels, file_path: Cow<
     Ok(())
 }
 
+fn get_truth<'a>(s: &'a Cow<'a, str>, map: &'a HashMap::<String, Token<'a>>) -> &'a Cow<'a, str> {
+    if let Some(truth) = map.get(&s.to_string()) {
+        let TokenType::Pp(ref pp) = truth.typ else { return s };
+        match pp {
+            PpType::SingleLine { value } => get_truth(&value, map),
+            _ => todo!(),
+        }
+    } else {
+        s
+    }
+}
+
 impl Mm {
     pub fn try_from_masm(file_path: &str) -> Result::<Mm, MTrap>
     where
@@ -46,65 +58,64 @@ impl Mm {
         let time = Instant::now();
 
         let lexer = Lexer::new(&file_path, &content);
-        let mut iter = lexer.lex_file().into_iter();
+        let (ts, mm) = lexer.lex_file();
 
+        let mut iter = ts.into_iter();
         let mut program = Vec::new();
         while let Some(et) = iter.next() {
-            match et {
-                EToken::Token(t) => {
-                    match t.typ {
-                        TokenType::Label => {
-                            let inst = Inst {
-                                typ: InstType::LABEL,
-                                val: InstValue::String(t.val.into())
-                            };
-                            program.push((t.loc, inst))
-                        }
-                        TokenType::Literal => {
-                            let Ok(typ) = InstType::try_from(&t.val) else {
-                                panic!("SCHEISSEE: {file_path}:{r}:{c}: {v}", r = t.loc.0, c = t.loc.1, v = t.val)
-                            };
-
-                            let inst = if typ.is_arg_required() {
-                                let arg = iter.next().unwrap();
-                                let sarg = match arg {
-                                    EToken::Expansion(s) => s,
-                                    EToken::Token(t) => t.val
-                                };
-
-                                let val = match typ {
-                                    InstType::PUSH | InstType::CMP | InstType::DUP => {
-                                        InstValue::F64 (
-                                            if sarg.contains('.') {
-                                                let Ok(v) = sarg.parse::<f64>() else {
-                                                    panic!("{file_path}:{r}:{c}: Invalid type, expected: u64 or f64", r = t.loc.0 + 1, c = t.loc.1)
-                                                };
-                                                NaNBox(v)
-                                            } else {
-                                                let Ok(v) = sarg.parse::<u64>() else {
-                                                    panic!("{file_path}:{r}:{c}: Invalid type, expected: u64 or f64", r = t.loc.0 + 1, c = t.loc.1)
-                                                };
-                                                NaNBox::from_u64(v)
-                                            }
-                                        )
-                                    },
-                                    InstType::DMP => InstValue::U8(sarg.parse::<u8>().unwrap()),
-                                    _ => InstValue::String(sarg.to_string())
-                                };
-
-                                Inst {
-                                    typ,
-                                    val
-                                }
-                            } else {
-                                Inst::try_from(typ).unwrap()
-                            };
-                            program.push((t.loc, inst));
-                        }
-                        _ => {}
-                    }
+            let EToken::Token(t) = et else { continue };
+            match t.typ {
+                TokenType::Label => {
+                    let inst = Inst {
+                        typ: InstType::LABEL,
+                        val: InstValue::String(t.val.into())
+                    };
+                    program.push((t.loc, inst))
                 }
-                _ => {}
+                TokenType::Literal => {
+                    let Ok(typ) = InstType::try_from(&t.val) else {
+                        panic!("SCHEISSEE: {file_path}:{r}:{c}: {v}", r = t.loc.0 + 1, c = t.loc.1, v = t.val)
+                    };
+
+                    let inst = if typ.is_arg_required() {
+                        let arg = iter.next().unwrap();
+                        let arg = get_truth(arg.as_str(), &mm);
+
+                        let val = match typ {
+                            InstType::PUSH | InstType::CMP | InstType::DUP => {
+                                InstValue::F64 (
+                                    if arg.contains('.') {
+                                        let Ok(v) = arg.parse::<f64>() else {
+                                            panic!("{file_path}:{r}:{c}: Invalid type, expected: u64 or f64", r = t.loc.0 + 1, c = t.loc.1)
+                                        };
+                                        NaNBox(v)
+                                    } else {
+                                        let Ok(v) = arg.parse::<u64>() else {
+                                            panic!("{file_path}:{r}:{c}: Invalid type, expected: u64 or f64", r = t.loc.0 + 1, c = t.loc.1)
+                                        };
+                                        NaNBox::from_u64(v)
+                                    }
+                                )
+                            },
+                            InstType::DMP => {
+                                let Ok(v) = arg.parse::<u8>() else {
+                                    panic!("{file_path}:{r}:{c}: Invalid type, expected: u64", r = t.loc.0 + 1, c = t.loc.1)
+                                };
+                                InstValue::U8(v)
+                            }
+                            _ => InstValue::String(arg.to_string())
+                        };
+
+                        Inst {
+                            typ,
+                            val
+                        }
+                    } else {
+                        Inst::try_from(typ).unwrap()
+                    };
+                    program.push((t.loc, inst));
+                }
+                _ => panic!("{file_path}:{r}:{c}: Undefined symbol: {s}", r = t.loc.0 + 1, c = t.loc.1, s = t.val)
             }
         }
 

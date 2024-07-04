@@ -27,6 +27,15 @@ pub enum EToken<'a> {
     Expansion(Cow<'a, str>)
 }
 
+impl<'a> EToken<'a> {
+    pub fn as_str(&self) -> &Cow<'a, str> {
+        match self {
+            EToken::Expansion(s) => s,
+            EToken::Token(t) => &t.val
+        }
+    }
+}
+
 impl Display for EToken<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -139,16 +148,15 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn expand_macros(self) -> ETokens<'a> {
-        let mm = self.mm;
+    fn expand_macros(self) -> (ETokens<'a>, MacrosMap<'a>) {
         let mut ets = ETokens::new();
         let mut iter = self.ts.into_iter().peekable();
 
         while let Some(t) = iter.next() {
-            Self::match_token(&mut iter, &mm, t, &mut ets);
+            Self::match_token(&mut iter, &self.mm, t, &mut ets);
         }
 
-        ets
+        (ets, self.mm)
     }
 
     fn split_whitespace_preserve_indices(input: &str) -> lexer::Iterator {
@@ -257,9 +265,11 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    pub fn lex_file(mut self) -> ETokens<'a> {
+    pub fn lex_file(mut self) -> (ETokens<'a>, MacrosMap<'a>) {
         while let Some((row, line)) = self.iter.next() {
-            if !line.trim().is_empty() && !self.check_for_macros(line, row) {
+            let trimmed = line.trim();
+            if trimmed.starts_with(';') || trimmed.is_empty() { continue }
+            if !self.check_for_macros(line, row) {
                 self.lex_line(line, row)
             }
         }
@@ -267,24 +277,3 @@ impl<'a> Lexer<'a> {
         self.expand_macros()
     }
 }
-
-// fn main() -> std::io::Result<()> {
-//     let args = env::args().collect::<Vec<_>>();
-//     if args.len() < 2 {
-//         eprintln!("Usage: {p} <input>", p = args[0]);
-//         exit(1)
-//     }
-
-//     let input = &args[1];
-//     let content = std::fs::read_to_string(input)?;
-//     let mut lexer = Lexer::new(input, &content);
-
-//     lexer.lex_file();
-
-//     let ets = lexer.expand_macros();
-//     for t in ets {
-//         println!("{f}:{t}", f = input);
-//     }
-
-//     Ok(())
-// }

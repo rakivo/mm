@@ -364,7 +364,7 @@ impl Mm {
                 match stream {
                     1 => print_oper_s(std::io::stdout(), last).unwrap(),
                     2 => print_oper_s(std::io::stderr(), last).unwrap(),
-                    _ => return Err(Trap::InvalidOperand(inst.to_string(), Some(stream.to_string())))
+                    _ => return Err(Trap::InvalidOperand(inst.to_string()))
                 }
                 self.ip += 1;
                 println!();
@@ -525,7 +525,8 @@ impl Mm {
 
 /* TODO:
     (#12) Implement proper errors and do not just `panic!`, even more embed lexer into the VM, to get even better error messages.
-    (#13) Allow use of macros inside of macros
+    (#13) Allow use of macros inside of macros.
+    (#14) Introduce notes to errors.
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
     2. Introduce MasmTranslator struct, that translates masm and report errors proper way.

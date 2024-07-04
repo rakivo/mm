@@ -202,6 +202,7 @@ impl TryFrom::<InstType> for Inst {
             InstType::FDIV => Ok(Self::FDIV),
             InstType::SWAP => Ok(Self::SWAP),
             InstType::BOT  => Ok(Self::BOT),
+            InstType::RET  => Ok(Self::RET),
             InstType::HALT => Ok(Self::HALT),
             _ => Err(())
         }
@@ -223,6 +224,7 @@ impl Inst {
     pub const FDIV: Self = Self { typ: InstType::FDIV, val: InstValue::None };
     pub const SWAP: Self = Self { typ: InstType::SWAP, val: InstValue::None };
     pub const BOT:  Self = Self { typ: InstType::BOT,  val: InstValue::None };
+    pub const RET:  Self = Self { typ: InstType::RET,  val: InstValue::None };
     pub const HALT: Self = Self { typ: InstType::HALT, val: InstValue::None };
 
     pub const MAX_STR_LEN: usize = 16 * 8;
@@ -310,7 +312,7 @@ macro_rules! inst_from_bytes {
 
             Ok((inst, 9))
         } else {
-            Err(Trap::InvalidOperand(stringify!($ret).to_owned(), None))
+            Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
         }
     }};
     ($b: ident, $ret: tt) => {{
@@ -324,10 +326,10 @@ macro_rules! inst_from_bytes {
                 };
                 Ok((inst, 9 + str_len))
             } else {
-                Err(Trap::InvalidOperand(stringify!($ret).to_owned(), None))
+                Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
             }
         } else {
-            Err(Trap::InvalidOperand(stringify!($ret).to_owned(), None))
+            Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
         }
     }}
 }
@@ -417,7 +419,7 @@ impl Inst {
                     val: if bytes.len() >= 2 {
                         InstValue::U8(bytes[1])
                     } else {
-                        return Err(Trap::InvalidOperand("DMP".to_owned(), None))
+                        return Err(Trap::InvalidOperand("DMP".to_owned()))
                     }
                 };
 

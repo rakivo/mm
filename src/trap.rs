@@ -10,7 +10,7 @@ pub enum Trap {
     DivisionByZero(InstType),
     IllegalInstructionAccess,
     NoEntryPointFound(String),
-    InvalidOperand(String, Option::<String>),
+    InvalidOperand(String),
     UndefinedSymbol(String),
     InvalidLabel(String, String),
     InvalidFunction(String, String),
@@ -27,9 +27,7 @@ impl std::fmt::Debug for Trap {
             CallStackUnderflow(inst)           => write!(f, "Call stack underflow, Last executed {inst}"),
             DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst:?}"),
             UndefinedSymbol(sym)               => write!(f, "Undefined symbol: {sym}"),
-            InvalidOperand(inst, oper)         => if let Some(oper) = oper {
-                write!(f, "Invalid operand, Last executed instruction: {inst}, {oper}")
-            } else { write!(f, "Invalid operand, Last executed instruction: {inst}") }
+            InvalidOperand(inst)               => write!(f, "Invalid operand, Last executed instruction: {inst}"),
             InvalidLabel(label, reason)        => write!(f, "Invalid label: `{label}`: {reason}"),
             InvalidFunction(func, reason)      => write!(f, "Invalid function: `{func}`: {reason}"),
             NoEntryPointFound(file_path)       => write!(f, "No entry point found in: {file_path}"),
