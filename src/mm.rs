@@ -525,6 +525,7 @@ impl Mm {
 
 /* TODO:
     (#12) Implement proper errors and do not just `panic!`, even more embed lexer into the VM, to get even better error messages.
+    (#13) Allow use of macros inside of macros
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
     2. Introduce MasmTranslator struct, that translates masm and report errors proper way.
