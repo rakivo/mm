@@ -41,6 +41,15 @@ impl std::fmt::Debug for Trap {
 
 pub struct MTrap<'a>(pub Cow<'a, str>, pub Loc, pub Trap);
 
+// Adding 1 to the row to convert it from 0-based indexing
+impl std::fmt::Debug for MTrap<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (file_path, loc, trap) = (&self.0, &self.1, &self.2);
+        let (row, col) = (loc.0 + 1, loc.1);
+        write!(f, "{file_path}:{row}:{col}: {trap:?}")
+    }
+}
+
 impl<'a> From::<(Cow<'a, str>, Loc, Trap)> for MTrap<'a> {
     fn from(t: (Cow<'a, str>, Loc, Trap)) -> Self {
         let (file_path, loc, trap) = (t.0, t.1, t.2);

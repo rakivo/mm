@@ -1,19 +1,10 @@
 use std::{
-    borrow::{Borrow, Cow},
-    collections::VecDeque, iter::Enumerate, process::exit, str::Lines, time::Instant
+    borrow::Cow,
+    collections::VecDeque, process::exit, time::Instant
 };
-use crate::{NaNBox, Inst, EToken, Flags, InstType, InstValue, Labels, Lexer, MResult, MTrap, Mm, Program, TokenType, Trap, ENTRY_POINT};
+use crate::{NaNBox, Inst, EToken, Flags, InstType, InstValue, Labels, Lexer, MTrap, Mm, Program, TokenType, Trap, ENTRY_POINT};
 
 pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
-
-// Adding 1 to the row to convert it from 0-based indexing
-impl std::fmt::Debug for MTrap<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (file_path, loc, trap) = (&self.0, &self.1, &self.2);
-        let (row, col) = (loc.0, loc.1);
-        write!(f, "{file_path}:{row}:{col}: {trap:?}")
-    }
-}
 
 fn comptime_labels_check<'a>(program: &Program, labels: &Labels, file_path: Cow<'a, str>) -> MMResult::<'a, ()> {
     use InstType::*;
@@ -71,8 +62,9 @@ impl Mm {
                         }
                         TokenType::Literal => {
                             let Ok(typ) = InstType::try_from(&t.val) else {
-                                panic!("SCHEIISEE: {v}", v = t.val)
+                                panic!("SCHEISSEE: {file_path}:{r}:{c}: {v}", r = t.loc.0, c = t.loc.1, v = t.val)
                             };
+
                             let inst = if typ.is_arg_required() {
                                 let arg = iter.next().unwrap();
                                 let sarg = match arg {
@@ -84,9 +76,15 @@ impl Mm {
                                     InstType::PUSH | InstType::CMP | InstType::DUP => {
                                         InstValue::F64 (
                                             if sarg.contains('.') {
-                                                NaNBox(sarg.parse::<f64>().unwrap())
+                                                let Ok(v) = sarg.parse::<f64>() else {
+                                                    panic!("{file_path}:{r}:{c}: Invalid type, expected: u64 or f64", r = t.loc.0 + 1, c = t.loc.1)
+                                                };
+                                                NaNBox(v)
                                             } else {
-                                                NaNBox::from_u64(sarg.parse::<u64>().unwrap())
+                                                let Ok(v) = sarg.parse::<u64>() else {
+                                                    panic!("{file_path}:{r}:{c}: Invalid type, expected: u64 or f64", r = t.loc.0 + 1, c = t.loc.1)
+                                                };
+                                                NaNBox::from_u64(v)
                                             }
                                         )
                                     },

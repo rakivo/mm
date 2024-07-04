@@ -81,6 +81,7 @@ impl<'a> Token<'a> {
 pub struct Lexer<'a> {
     ts: Tokens<'a>,
     mm: MacrosMap<'a>,
+    #[allow(unused)]
     file_path: &'a str,
     iter: Enumerate::<Peekable::<Lines<'a>>>,
 }
@@ -169,31 +170,6 @@ impl<'a> Lexer<'a> {
         }
 
         ret.into_iter()
-    }
-
-    fn collect_tokens_by_labels(&self) -> Labels {
-        let (ts, mut ret, label) = self.ts.iter().fold((Vec::new(), Vec::new(), None),
-            |(mut ts, mut ret, mut label), token|
-        {
-            match token.typ {
-                TokenType::Label => {
-                    if let Some(label) = label.take() {
-                        ret.push((label, ts));
-                    }
-                    let t = Some(token.to_owned());
-                    (Vec::new(), ret, t)
-                }
-                _ => if label.is_some() {
-                    ts.push(token.to_owned());
-                    (ts, ret, label)
-                } else {
-                    (ts, ret, label)
-                }
-            }
-        });
-
-        if let Some(label) = label { ret.push((label, ts)); }
-        ret
     }
 
     #[inline(always)]
