@@ -1,12 +1,13 @@
-use crate::{Inst, Type};
+use std::borrow::Cow;
+use crate::{Inst, Loc, InstType, Type};
 
 #[derive(Clone)]
 pub enum Trap {
-    StackOverflow(Inst),
-    StackUnderflow(Inst),
+    StackOverflow(InstType),
+    StackUnderflow(InstType),
     CallStackOverflow(Inst),
     CallStackUnderflow(Inst),
-    DivisionByZero(Inst),
+    DivisionByZero(InstType),
     IllegalInstructionAccess,
     NoEntryPointFound(String),
     InvalidOperand(String, Option::<String>),
@@ -20,11 +21,11 @@ impl std::fmt::Debug for Trap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Trap::*;
         match self {
-            StackOverflow(inst)                => write!(f, "Stack overflow, Last executed {inst}"),
-            StackUnderflow(inst)               => write!(f, "Stack underflow, Last executed {inst}"),
+            StackOverflow(inst)                => write!(f, "Stack overflow, Last executed {inst:?}"),
+            StackUnderflow(inst)               => write!(f, "Stack underflow, Last executed {inst:?}"),
             CallStackOverflow(inst)            => write!(f, "Call stack overflow, Last executed {inst}"),
             CallStackUnderflow(inst)           => write!(f, "Call stack underflow, Last executed {inst}"),
-            DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst}"),
+            DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst:?}"),
             UndefinedSymbol(sym)               => write!(f, "Undefined symbol: {sym}"),
             InvalidOperand(inst, oper)         => if let Some(oper) = oper {
                 write!(f, "Invalid operand, Last executed instruction: {inst}, {oper}")
@@ -38,13 +39,11 @@ impl std::fmt::Debug for Trap {
     }
 }
 
-pub struct MTrap(pub Trap, pub Option::<(String, usize)>);
+pub struct MTrap<'a>(pub Cow<'a, str>, pub Loc, pub Trap);
 
-impl From::<(&str, usize, Trap)> for MTrap {
-    fn from(t: (&str, usize, Trap)) -> Self {
-        let file_path = t.0;
-        let row = t.1;
-        let trap = t.2;
-        MTrap(trap, Some((file_path.to_owned(), row)))
+impl<'a> From::<(Cow<'a, str>, Loc, Trap)> for MTrap<'a> {
+    fn from(t: (Cow<'a, str>, Loc, Trap)) -> Self {
+        let (file_path, loc, trap) = (t.0, t.1, t.2);
+        MTrap(file_path, loc, trap)
     }
 }

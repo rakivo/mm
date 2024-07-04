@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     iter::{Enumerate, Peekable},
 };
-use crate::ALL_VARIANTS_AS_STR;
+use crate::Inst::ALL_VARIANTS_AS_STR;
 
 #[derive(Debug)]
 pub enum Macro<'a> {
@@ -104,7 +104,7 @@ impl<'a> Comptime<'a> {
     fn parse_macro(&mut self, line: &'a str, row: usize) {
         let trimmed = line.trim();
         if trimmed.ends_with('{')
-            || matches!(self.iter.peek(), Some(line) if line.1.trim().starts_with('{'))
+        || matches!(self.iter.peek(), Some(line) if line.1.trim().starts_with('{'))
         {
             let splitted = trimmed.split_whitespace().collect::<Vec::<_>>();
             let name = {

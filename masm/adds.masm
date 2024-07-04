@@ -1,4 +1,14 @@
+#SYS_STDOUT 1
+
+#write arg1 arg2 oper out {
+    push arg1
+    push arg2
+    oper
+    dmp out
+}
+
 _start:
+    write 34 35 iadd SYS_STDOUT
     jmp faddin
 
 faddin:

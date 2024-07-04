@@ -1,102 +1,38 @@
 use std::{
+    borrow::{Borrow, Cow},
     collections::VecDeque, iter::Enumerate, process::exit, str::Lines, time::Instant
 };
-use crate::{process_content, Comptime, Flags, Inst, Labels, MResult, MTrap, Mm, Program, Trap, ENTRY_POINT};
+use crate::{Inst, EToken, Flags, InstType, Labels, Lexer, MResult, MTrap, Mm, Program, TokenType, Trap, ENTRY_POINT};
 
-pub type MMResult<T> = std::result::Result::<T, MTrap>;
+pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
 
 // Adding 1 to the row to convert it from 0-based indexing
-impl std::fmt::Debug for MTrap {
+impl std::fmt::Debug for MTrap<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (trap, info) = (&self.0, &self.1);
-        if let Some(info) = info {
-            let (file_path, row) = (info.0.to_owned(), info.1 + 1);
-            write!(f, "{file_path}:{row}: {trap:?}")
-        } else {
-            write!(f, "{trap:?}")
-        }
+        let (file_path, loc, trap) = (&self.0, &self.1, &self.2);
+        let (row, col) = (loc.0, loc.1);
+        write!(f, "{file_path}:{row}:{col}: {trap:?}")
     }
 }
 
-struct Parser<'a> {
-    iter: Enumerate::<Lines<'a>>,
-    program: Program,
-    file_path: &'a str
-}
-
-impl<'a> Parser<'a> {
-    pub fn new(content: &'a str, file_path: &'a str) -> Self {
-        Self {
-            iter: content.lines().enumerate(),
-            program: Program::new(),
-            file_path
-        }
-    }
-
-    fn parse_labels(&mut self, line: &'a str, row: usize) -> MResult::<()> {
-        let splitted = line.split_whitespace().collect::<Vec::<_>>();
-        assert!(splitted.len() == 1, "{f}:{r}: Scheisse is NOT allowed here", f = self.file_path, r = row + 1);
-
-        self.program.extend
-        (
-            line[..line.len() - 1].split(',')
-                .map(|label| (Inst::LABEL(label.trim().to_owned()), row))
-        );
-
-        Ok(())
-    }
-
-    fn parse_line(&mut self, line: &'a str, row: usize) -> MResult::<()> {
-        let Some(first) = line.chars().next() else {
-            return Ok(())
-        };
-
-        if first.is_ascii() && line.ends_with(':') {
-            assert!(line.len() > 1, "Label without a name");
-            self.parse_labels(&line, row)
-        } else {
-            let inst = Inst::try_from(line).map_err(|err| {
-                MTrap(err, Some((self.file_path.to_owned(), row)))
-            }).unwrap_or_report();
-
-            self.program.push((inst, row));
-            Ok(())
-        }
-    }
-
-    fn parse(mut self) -> MResult::<Program> {
-        while let Some((row, line)) = self.iter.next() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with(';') { continue }
-            self.parse_line(&line, row)?;
-        }
-
-        if matches!(self.program.last(), Some(last) if last.0 != Inst::HALT) {
-            self.program.push((Inst::HALT, self.program.last().unwrap().1 + 1));
-        }
-
-        Ok(self.program)
-    }
-}
-
-fn comptime_labels_check<'a>(program: &Program, labels: &Labels, file_path: &'a str) -> MMResult::<()> {
-    use Inst::*;
-    for (inst, row) in program.iter() {
-        match inst {
-              JE(ref label)
-            | JL(ref label)
-            | JG(ref label)
-            | JNGE(ref label)
-            | JNE(ref label)
-            | JNLE(ref label)
-            | JZ(ref label)
-            | JNZ(ref label)
-            | JMP(ref label)
-            | CALL(ref label) =>
-            {
+fn comptime_labels_check<'a>(program: &Program, labels: &Labels, file_path: Cow<'a, str>) -> MMResult::<'a, ()> {
+    use InstType::*;
+    for (inst, (row, col)) in program.iter() {
+        match inst.typ {
+              JE
+            | JL
+            | JG
+            | JNGE
+            | JNE
+            | JNLE
+            | JZ
+            | JNZ
+            | JMP
+            | CALL => {
+                let label = inst.val.string();
                 if !labels.contains_key(label) {
                     let trap = Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned());
-                    return Err(MTrap(trap, Some((file_path.to_owned(), *row))))
+                    return Err(MTrap(file_path, (*row, *col), trap))
                 }
             }
             _ => {}
@@ -118,7 +54,24 @@ impl Mm {
 
         let time = Instant::now();
 
-        
+        let lexer = Lexer::new(&file_path, &content);
+        let tokens = lexer.lex_file();
+        for (i, et) in tokens.into_iter().enumerate() {
+            println!("{et}");
+            match et {
+                EToken::Token(t) => {
+                    match t.typ {
+                        TokenType::Literal => {
+                            let Ok(inst) = InstType::try_from(&t.val) else {
+                                panic!("SCHEIISEE: {v}", v = t.val)
+                            };
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
 
         let elapsed = time.elapsed().as_micros();
         println!("Parsing and comptime checks took: {elapsed} microseconds");
@@ -138,7 +91,7 @@ impl Mm {
         //     halt: false
         // };
 
-        Ok(mm)
+        Ok(Mm::new(Program::new(), "ewq"))
     }
 }
 
