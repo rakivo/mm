@@ -68,6 +68,44 @@ impl InstType {
     }
 }
 
+impl std::fmt::Display for InstType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InstType::NOP   => write!(f, "nop"),
+            InstType::PUSH  => write!(f, "push"),
+            InstType::POP   => write!(f, "pop"),
+            InstType::INC   => write!(f, "inc"),
+            InstType::DEC   => write!(f, "dec"),
+            InstType::IADD  => write!(f, "iadd"),
+            InstType::ISUB  => write!(f, "isub"),
+            InstType::IMUL  => write!(f, "imul"),
+            InstType::IDIV  => write!(f, "idiv"),
+            InstType::FADD  => write!(f, "fadd"),
+            InstType::FSUB  => write!(f, "fsub"),
+            InstType::FMUL  => write!(f, "fmul"),
+            InstType::FDIV  => write!(f, "fdiv"),
+            InstType::CMP   => write!(f, "cmp"),
+            InstType::SWAP  => write!(f, "swap"),
+            InstType::DUP   => write!(f, "dup"),
+            InstType::JE    => write!(f, "je"),
+            InstType::JL    => write!(f, "jl"),
+            InstType::JNGE  => write!(f, "jnge"),
+            InstType::JG    => write!(f, "jg"),
+            InstType::JNLE  => write!(f, "jnle"),
+            InstType::JNE   => write!(f, "jne"),
+            InstType::JZ    => write!(f, "jz"),
+            InstType::JNZ   => write!(f, "jnz"),
+            InstType::JMP   => write!(f, "jmp"),
+            InstType::LABEL => write!(f, "label"),
+            InstType::BOT   => write!(f, "bot"),
+            InstType::DMP   => write!(f, "dmp"),
+            InstType::CALL  => write!(f, "call"),
+            InstType::RET   => write!(f, "ret"),
+            InstType::HALT  => write!(f, "halt"),
+        }
+    }
+}
+
 impl TryFrom::<&Cow<'_, str>> for InstType {
     type Error = Trap;
 
@@ -113,8 +151,10 @@ impl TryFrom::<&Cow<'_, str>> for InstType {
 #[derive(Clone, Debug, PartialEq)]
 pub enum InstValue {
     U8(u8),
-    F64(NaNBox),
-    U64(NaNBox),
+    NaN(NaNBox),
+    F64(f64),
+    I64(i64),
+    U64(u64),
     String(String),
     None
 }
@@ -129,7 +169,7 @@ impl InstValue {
     }
 
     #[inline]
-    pub fn get_word(&self) -> Option::<NaNBox> {
+    pub fn get_u64(&self) -> Option::<u64> {
         match self {
             InstValue::U64(word) => Some(*word),
             _ => None
@@ -139,7 +179,7 @@ impl InstValue {
     #[inline]
     pub fn get_nan(&self) -> Option::<NaNBox> {
         match self {
-            InstValue::F64(nan) => Some(*nan),
+            InstValue::NaN(nan) => Some(*nan),
             _ => None
         }
     }
@@ -160,8 +200,8 @@ impl InstValue {
 
     #[inline]
     #[track_caller]
-    pub fn word(&self) -> NaNBox {
-        self.get_word().unwrap()
+    pub fn u64_(&self) -> u64 {
+        self.get_u64().unwrap()
     }
 
     #[inline]
@@ -266,35 +306,46 @@ impl Inst {
 }
 
 const _: () = assert!(std::mem::size_of::<f64>() == Inst::SIZE, "Mm's designed to be working on 64bit");
+const INSTRUCTION_PART: usize = Inst::SIZE + 1;
 
-fn extend_from_bytes_nan(n: u8, val: &NaNBox) -> &'static [u8] {
-    let mut bytes = [0u8; Inst::SIZE + 1];
-    bytes[0] = n;
-    let le_bytes = val.as_f64().to_le_bytes();
-    assert!(le_bytes.len() == 8);
-    bytes[1..].copy_from_slice(&le_bytes);
-    unsafe { std::slice::from_raw_parts(bytes.as_ptr(), Inst::SIZE + 1) }
+fn extend_from_bytes_u64(n: u8, val: u64) -> Vec::<u8> {
+    let mut bytes = Vec::with_capacity(INSTRUCTION_PART);
+    bytes.push(n);
+    let le_bytes = val.to_le_bytes();
+    bytes.extend(le_bytes);
+    bytes
 }
 
-fn extend_to_bytes_string(n: u8, val: &str) -> &'static [u8] {
-    let mut bytes = [0u8; Inst::SIZE + Inst::MAX_STR_LEN + 1];
-    bytes[0] = n;
+fn extend_from_bytes_nan(n: u8, val: &NaNBox) -> Vec::<u8> {
+    let mut bytes = Vec::with_capacity(INSTRUCTION_PART);
+    bytes.push(n);
+    let le_bytes = val.as_f64().to_le_bytes();
+    bytes.extend(le_bytes);
+    bytes
+}
+
+fn extend_to_bytes_string(n: u8, val: &str) -> Vec::<u8> {
+    let mut bytes = Vec::with_capacity(128);
+    bytes.push(n);
     let str_bytes = val.as_bytes();
     let str_len = str_bytes.len();
-    assert!(str_len <= Inst::MAX_STR_LEN, "Ohh shoot mate, your string is too long, maximum string length: {m}", m = Inst::MAX_STR_LEN);
-    let part_one_end = Inst::SIZE + 1;
     let le_bytes = (str_len as u64).to_le_bytes();
-    assert!(le_bytes.len() == 8);
-    bytes[1..part_one_end].copy_from_slice(&le_bytes);
-    bytes[part_one_end..part_one_end + str_len].copy_from_slice(str_bytes);
-    unsafe { std::slice::from_raw_parts(bytes.as_ptr(), part_one_end + str_len) }
+    bytes.extend(le_bytes);
+    bytes.extend(str_bytes);
+    bytes
 }
 
 fn nan_from_bytes(bytes: &[u8]) -> NaNBox {
     let mut array = [0; 8];
-    array.copy_from_slice(&bytes[1..9]);
+    array.copy_from_slice(&bytes[1..Inst::SIZE + 1]);
     let f = f64::from_le_bytes(array);
     NaNBox(f)
+}
+
+fn u64_from_bytes(bytes: &[u8]) -> u64 {
+    let mut array = [0; 8];
+    array.copy_from_slice(&bytes[1..Inst::SIZE + 1]);
+    u64::from_le_bytes(array)
 }
 
 fn string_from_bytes(bytes: &[u8], n: usize) -> String {
@@ -305,6 +356,19 @@ macro_rules! inst_from_bytes {
     (i.$b: ident, $ret: tt) => {{
         if $b.len() >= 9 {
             let a = nan_from_bytes(&$b);
+            let inst = Inst {
+                typ: InstType::$ret,
+                val: InstValue::NaN(a)
+            };
+
+            Ok((inst, 9))
+        } else {
+            Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
+        }
+    }};
+    (n.$b: ident, $ret: tt) => {{
+        if $b.len() >= 9 {
+            let a = u64_from_bytes(&$b);
             let inst = Inst {
                 typ: InstType::$ret,
                 val: InstValue::U64(a)
@@ -335,48 +399,41 @@ macro_rules! inst_from_bytes {
 }
 
 impl Inst {
-    #[inline(always)]
-    fn extend_lifetime(fixed: &[u8]) -> &'static [u8] {
-        unsafe { std::slice::from_raw_parts(fixed.as_ptr(), fixed.len()) }
-    }
-
-    pub fn as_bytes(&self) -> &[u8] {
-        use InstType::*;
-
+    pub fn as_bytes(&self) -> Vec::<u8> {
         match self.typ {
-            NOP   => &[0],
-            PUSH  => extend_from_bytes_nan(1, &self.val.word()),
-            POP   => &[2],
-            INC   => &[3],
-            DEC   => &[4],
+            InstType::NOP   => vec![0],
+            InstType::PUSH  => extend_from_bytes_nan(1, &self.val.nan()),
+            InstType::POP   => vec![2],
+            InstType::INC   => vec![3],
+            InstType::DEC   => vec![4],
 
-            IADD  => &[5],
-            ISUB  => &[6],
-            IMUL  => &[7],
-            IDIV  => &[8],
+            InstType::IADD  => vec![5],
+            InstType::ISUB  => vec![6],
+            InstType::IMUL  => vec![7],
+            InstType::IDIV  => vec![8],
 
-            CMP   => extend_from_bytes_nan(9, &self.val.word()),
-            SWAP  => &[10],
-            DUP   => extend_from_bytes_nan(11, &self.val.word()),
-            JE    => extend_to_bytes_string(12, self.val.string()),
-            JL    => extend_to_bytes_string(13, self.val.string()),
-            JNGE  => extend_to_bytes_string(14, self.val.string()),
-            JG    => extend_to_bytes_string(15, self.val.string()),
-            JNLE  => extend_to_bytes_string(16, self.val.string()),
-            JNE   => extend_to_bytes_string(17, self.val.string()),
-            JZ    => extend_to_bytes_string(18, self.val.string()),
-            JNZ   => extend_to_bytes_string(19, self.val.string()),
-            JMP   => extend_to_bytes_string(20, self.val.string()),
-            LABEL => extend_to_bytes_string(21, self.val.string()),
-            BOT   => &[22],
-            FADD  => &[23],
-            FSUB  => &[24],
-            FMUL  => &[25],
-            FDIV  => &[26],
-            DMP   => Self::extend_lifetime(&[27, self.val.u8_()]),
-            CALL  => extend_to_bytes_string(28, self.val.string()),
-            RET   => &[30],
-            HALT  => &[69],
+            InstType::CMP   => extend_from_bytes_nan(9, &self.val.nan()),
+            InstType::SWAP  => vec![10],
+            InstType::DUP   => extend_from_bytes_u64(11, self.val.u64_()),
+            InstType::JE    => extend_to_bytes_string(12, self.val.string()),
+            InstType::JL    => extend_to_bytes_string(13, self.val.string()),
+            InstType::JNGE  => extend_to_bytes_string(14, self.val.string()),
+            InstType::JG    => extend_to_bytes_string(15, self.val.string()),
+            InstType::JNLE  => extend_to_bytes_string(16, self.val.string()),
+            InstType::JNE   => extend_to_bytes_string(17, self.val.string()),
+            InstType::JZ    => extend_to_bytes_string(18, self.val.string()),
+            InstType::JNZ   => extend_to_bytes_string(19, self.val.string()),
+            InstType::JMP   => extend_to_bytes_string(20, self.val.string()),
+            InstType::LABEL => extend_to_bytes_string(21, self.val.string()),
+            InstType::BOT   => vec![22],
+            InstType::FADD  => vec![23],
+            InstType::FSUB  => vec![24],
+            InstType::FMUL  => vec![25],
+            InstType::FDIV  => vec![26],
+            InstType::DMP   => vec![27, self.val.u8_()],
+            InstType::CALL  => extend_to_bytes_string(28, self.val.string()),
+            InstType::RET   => vec![29],
+            InstType::HALT  => vec![69],
         }
     }
 
@@ -394,7 +451,7 @@ impl Inst {
             Some(8)  => Ok((Inst::IDIV, 1)),
             Some(9)  => inst_from_bytes!(i.bytes, CMP),
             Some(10) => Ok((Inst::SWAP, 1)),
-            Some(11) => inst_from_bytes!(i.bytes, DUP),
+            Some(11) => inst_from_bytes!(n.bytes, DUP),
             Some(12) => inst_from_bytes!(bytes, JE),
             Some(13) => inst_from_bytes!(bytes, JL),
             Some(14) => inst_from_bytes!(bytes, JNGE),
@@ -427,102 +484,89 @@ impl Inst {
             }
 
             Some(28) => inst_from_bytes!(bytes, CALL),
+            Some(29) => Ok((Inst::RET, 1)),
 
             Some(69) => Ok((Inst::HALT, 1)),
-            _        => Err(Trap::UndefinedSymbol(String::from_utf8_lossy(bytes).to_string())),
+            _        => Err(Trap::UndefinedSymbol(format!("bytes: {bytes:?}"))),
         }
     }
 }
 
 impl From<&Inst> for String {
     fn from(inst: &Inst) -> Self {
-        let u8_ = || {
-            inst.val.get_u8().unwrap()
-        };
-
-        let word = || {
-            inst.val.get_word().unwrap()
-        };
-
-        let string = || {
-            inst.val.get_string().unwrap()
-        };
-
-        use InstType::*;
         match inst.typ {
-            NOP   => format!("    nop"),
-            PUSH  => format!("    push    {oper}", oper = word()),
-            POP   => format!("    pop"),
-            INC   => format!("    inc"),
-            DEC   => format!("    dec"),
-            IADD  => format!("    iadd"),
-            ISUB  => format!("    isub"),
-            IMUL  => format!("    imul"),
-            IDIV  => format!("    idiv"),
-            FADD  => format!("    fadd"),
-            FSUB  => format!("    fsub"),
-            FMUL  => format!("    fmul"),
-            FDIV  => format!("    fdiv"),
-            CMP   => format!("    cmp     {oper}", oper = word()),
-            SWAP  => format!("    swap"),
-            DUP   => format!("    dup     {oper}", oper = word()),
-            JE    => format!("    je      {oper}", oper = string()),
-            JL    => format!("    jl      {oper}", oper = string()),
-            JNGE  => format!("    jnge    {oper}", oper = string()),
-            JG    => format!("    jg      {oper}", oper = string()),
-            JNLE  => format!("    jnle    {oper}", oper = string()),
-            JNE   => format!("    jne     {oper}", oper = string()),
-            JZ    => format!("    jz      {oper}", oper = string()),
-            JNZ   => format!("    jnz     {oper}", oper = string()),
-            JMP   => format!("    jmp     {oper}", oper = string()),
-            LABEL => format!("{oper}:", oper = string()),
-            CALL  => format!("    call    {oper}", oper = string()),
-            BOT   => format!("    bot"),
-            RET   => format!("    ret"),
-            DMP   => format!("    dmp     {oper}", oper = u8_()),
-            HALT  => format!("    halt"),
+            InstType::NOP   => format!("    nop"),
+            InstType::PUSH  => format!("    push    {oper}", oper = inst.val.nan()),
+            InstType::POP   => format!("    pop"),
+            InstType::INC   => format!("    inc"),
+            InstType::DEC   => format!("    dec"),
+            InstType::IADD  => format!("    iadd"),
+            InstType::ISUB  => format!("    isub"),
+            InstType::IMUL  => format!("    imul"),
+            InstType::IDIV  => format!("    idiv"),
+            InstType::FADD  => format!("    fadd"),
+            InstType::FSUB  => format!("    fsub"),
+            InstType::FMUL  => format!("    fmul"),
+            InstType::FDIV  => format!("    fdiv"),
+            InstType::CMP   => format!("    cmp     {oper}", oper = inst.val.nan()),
+            InstType::SWAP  => format!("    swap"),
+            InstType::DUP   => format!("    dup     {oper}", oper = inst.val.u64_()),
+            InstType::JE    => format!("    je      {oper}", oper = inst.val.string()),
+            InstType::JL    => format!("    jl      {oper}", oper = inst.val.string()),
+            InstType::JNGE  => format!("    jnge    {oper}", oper = inst.val.string()),
+            InstType::JG    => format!("    jg      {oper}", oper = inst.val.string()),
+            InstType::JNLE  => format!("    jnle    {oper}", oper = inst.val.string()),
+            InstType::JNE   => format!("    jne     {oper}", oper = inst.val.string()),
+            InstType::JZ    => format!("    jz      {oper}", oper = inst.val.string()),
+            InstType::JNZ   => format!("    jnz     {oper}", oper = inst.val.string()),
+            InstType::JMP   => format!("    jmp     {oper}", oper = inst.val.string()),
+            InstType::LABEL => format!("{oper}:", oper = inst.val.string()),
+            InstType::CALL  => format!("    call    {oper}", oper = inst.val.string()),
+            InstType::BOT   => format!("    bot"),
+            InstType::RET   => format!("    ret"),
+            InstType::DMP   => format!("    dmp     {oper}", oper = inst.val.u8_()),
+            InstType::HALT  => format!("    halt"),
         }
     }
 }
 
 impl std::fmt::Display for Inst {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use InstType::*;
         match self.typ {
-            NOP   => write!(f, "Instruction: `NOP`"),
-            PUSH  => { write!(f, "Instruction: `PUSH`, operand: ")?; print_oper_f(f, &self.val.nan()) }
-            POP   => write!(f, "Instruction: `POP`"),
-            INC   => write!(f, "Instruction: `INC`"),
-            DEC   => write!(f, "Instruction: `DEC`"),
+            InstType::NOP   => write!(f, "Instruction: `NOP`"),
+            InstType::PUSH  => { write!(f, "Instruction: `PUSH`, operand: ")?; print_oper_f(f, &self.val.nan()) }
+            InstType::POP   => write!(f, "Instruction: `POP`"),
+            InstType::INC   => write!(f, "Instruction: `INC`"),
+            InstType::DEC   => write!(f, "Instruction: `DEC`"),
 
-            IADD  => write!(f, "Instruction: `IADD`"),
-            ISUB  => write!(f, "Instruction: `ISUB`"),
-            IMUL  => write!(f, "Instruction: `IMUL`"),
-            IDIV  => write!(f, "Instruction: `IDIV`"),
+            InstType::IADD  => write!(f, "Instruction: `IADD`"),
+            InstType::ISUB  => write!(f, "Instruction: `ISUB`"),
+            InstType::IMUL  => write!(f, "Instruction: `IMUL`"),
+            InstType::IDIV  => write!(f, "Instruction: `IDIV`"),
 
-            FADD  => write!(f, "Instruction: `FADD`"),
-            FSUB  => write!(f, "Instruction: `FSUB`"),
-            FMUL  => write!(f, "Instruction: `FMUL`"),
-            FDIV  => write!(f, "Instruction: `FDIV`"),
+            InstType::FADD  => write!(f, "Instruction: `FADD`"),
+            InstType::FSUB  => write!(f, "Instruction: `FSUB`"),
+            InstType::FMUL  => write!(f, "Instruction: `FMUL`"),
+            InstType::FDIV  => write!(f, "Instruction: `FDIV`"),
 
-            CMP   => { write!(f, "Instruction: `CMP`, operand: ")?; print_oper_f(f, &self.val.word()) }
-            SWAP  => write!(f, "Instruction: `SWAP`"),
-            DUP   => { write!(f, "Instruction: `DUP`, operand: ")?; print_oper_f(f, &self.val.word()) }
-            JE    => write!(f, "Instruction: `JE`, operand: `{oper}`", oper = self.val.string()),
-            JL    => write!(f, "Instruction: `JL`, operand: `{oper}`", oper = self.val.string()),
-            JNGE  => write!(f, "Instruction: `JNGE`, operand: `{oper}`", oper = self.val.string()),
-            JG    => write!(f, "Instruction: `JG`, operand: `{oper}`", oper = self.val.string()),
-            JNLE  => write!(f, "Instruction: `JNLE`, operand: `{oper}`", oper = self.val.string()),
-            JNE   => write!(f, "Instruction: `JNE`, operand: `{oper}`", oper = self.val.string()),
-            JZ    => write!(f, "Instruction: `JZ`, operand: `{oper}`", oper = self.val.string()),
-            JNZ   => write!(f, "Instruction: `JNZ`, operand: `{oper}`", oper = self.val.string()),
-            JMP   => write!(f, "Instruction: `JMP`, operand: `{oper}`", oper = self.val.string()),
-            LABEL => write!(f, "Instruction: `LABEL`, operand: `{oper}`", oper = self.val.string()),
-            CALL  => write!(f, "Instruction: `CALL`, operand: `{oper}`", oper = self.val.string()),
-            BOT   => write!(f, "Instruction: `BOT`"),
-            RET   => write!(f, "Instruction: `RET`"),
-            DMP   => write!(f, "Instruction: `DMP`, operand: {oper}", oper = self.val.u8_()),
-            HALT  => write!(f, "Instruction: `HALT`"),
+            InstType::CMP   => { write!(f, "Instruction: `CMP`, operand: ")?; print_oper_f(f, &self.val.nan()) }
+            InstType::SWAP  => write!(f, "Instruction: `SWAP`"),
+            InstType::DUP   => { write!(f, "Instruction: `DUP`, operand: ")?; write!(f, "{}", &self.val.u64_()) }
+            InstType::JE    => write!(f, "Instruction: `JE`, operand: `{oper}`", oper = self.val.string()),
+            InstType::JL    => write!(f, "Instruction: `JL`, operand: `{oper}`", oper = self.val.string()),
+            InstType::JNGE  => write!(f, "Instruction: `JNGE`, operand: `{oper}`", oper = self.val.string()),
+            InstType::JG    => write!(f, "Instruction: `JG`, operand: `{oper}`", oper = self.val.string()),
+            InstType::JNLE  => write!(f, "Instruction: `JNLE`, operand: `{oper}`", oper = self.val.string()),
+            InstType::JNE   => write!(f, "Instruction: `JNE`, operand: `{oper}`", oper = self.val.string()),
+            InstType::JZ    => write!(f, "Instruction: `JZ`, operand: `{oper}`", oper = self.val.string()),
+            InstType::JNZ   => write!(f, "Instruction: `JNZ`, operand: `{oper}`", oper = self.val.string()),
+            InstType::JMP   => write!(f, "Instruction: `JMP`, operand: `{oper}`", oper = self.val.string()),
+            InstType::LABEL => write!(f, "Instruction: `LABEL`, operand: `{oper}`", oper = self.val.string()),
+            InstType::CALL  => write!(f, "Instruction: `CALL`, operand: `{oper}`", oper = self.val.string()),
+            InstType::BOT   => write!(f, "Instruction: `BOT`"),
+            InstType::RET   => write!(f, "Instruction: `RET`"),
+            InstType::DMP   => write!(f, "Instruction: `DMP`, operand: {oper}", oper = self.val.u8_()),
+            InstType::HALT  => write!(f, "Instruction: `HALT`"),
         }
     }
 }

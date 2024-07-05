@@ -3,6 +3,8 @@ use crate::{Inst, Loc, InstType, Type};
 
 #[derive(Clone)]
 pub enum Trap {
+    InvalidOperand(String),
+    UndefinedSymbol(String),
     StackOverflow(InstType),
     StackUnderflow(InstType),
     CallStackOverflow(Inst),
@@ -10,8 +12,7 @@ pub enum Trap {
     DivisionByZero(InstType),
     IllegalInstructionAccess,
     NoEntryPointFound(String),
-    InvalidOperand(String),
-    UndefinedSymbol(String),
+    InvalidType(String, String),
     InvalidLabel(String, String),
     InvalidFunction(String, String),
     OperationWithDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
@@ -21,17 +22,18 @@ impl std::fmt::Debug for Trap {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Trap::*;
         match self {
-            StackOverflow(inst)                => write!(f, "Stack overflow, Last executed {inst:?}"),
-            StackUnderflow(inst)               => write!(f, "Stack underflow, Last executed {inst:?}"),
-            CallStackOverflow(inst)            => write!(f, "Call stack overflow, Last executed {inst}"),
-            CallStackUnderflow(inst)           => write!(f, "Call stack underflow, Last executed {inst}"),
-            DivisionByZero(inst)               => write!(f, "Division by zero, Last executed {inst:?}"),
-            UndefinedSymbol(sym)               => write!(f, "Undefined symbol: {sym}"),
-            InvalidOperand(inst)               => write!(f, "Invalid operand, Last executed instruction: {inst}"),
-            InvalidLabel(label, reason)        => write!(f, "Invalid label: `{label}`: {reason}"),
-            InvalidFunction(func, reason)      => write!(f, "Invalid function: `{func}`: {reason}"),
-            NoEntryPointFound(file_path)       => write!(f, "No entry point found in: {file_path}"),
-            IllegalInstructionAccess           => write!(f, "Illegal instruction access"),
+            StackOverflow(inst)                   => write!(f, "Stack overflow, Last executed {inst:?}"),
+            StackUnderflow(inst)                  => write!(f, "Stack underflow, Last executed {inst:?}"),
+            CallStackOverflow(inst)               => write!(f, "Call stack overflow, Last executed {inst}"),
+            CallStackUnderflow(inst)              => write!(f, "Call stack underflow, Last executed {inst}"),
+            DivisionByZero(inst)                  => write!(f, "Division by zero, Last executed {inst:?}"),
+            UndefinedSymbol(sym)                  => write!(f, "Undefined symbol: {sym}"),
+            InvalidOperand(inst)                  => write!(f, "Invalid operand, Last executed instruction: {inst}"),
+            InvalidLabel(label, reason)           => write!(f, "Invalid label: `{label}`: {reason}"),
+            InvalidFunction(func, reason)         => write!(f, "Invalid function: `{func}`: {reason}"),
+            NoEntryPointFound(file_path)          => write!(f, "No entry point found in: {file_path}"),
+            IllegalInstructionAccess              => write!(f, "Illegal instruction access"),
+            InvalidType(of, expected)             => write!(f, "Invalid type: {of}, expected: {expected}"),
             OperationWithDifferentTypes(ty1, ty2) => write!(f, "Can't perform an operation with two different types, type 1: {ty1:?}, type 2: {ty2:?}")
         }
     }

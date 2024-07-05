@@ -294,7 +294,7 @@ impl Mm {
             FDIV => self.two_opers_inst(FDIV, true, 2),
 
             CMP => {
-                let oper = inst.val.word();
+                let oper = inst.val.nan();
                 if let Some(ref last) = self.stack.back() {
                     self.flags.cmp(&last.as_u64(), &oper.as_u64());
                     self.ip += 1;
@@ -305,10 +305,10 @@ impl Mm {
             }
 
             DUP => {
-                let oper = inst.val.word();
-                if self.stack.len() > oper.0 as usize {
+                let oper = inst.val.u64_();
+                if self.stack.len() > oper as usize {
                     if self.stack.len() < Mm::STACK_CAP {
-                        let val = self.stack[self.stack.len() - 1 - oper.0 as usize];
+                        let val = self.stack[self.stack.len() - 1 - oper as usize];
                         self.stack.push_back(val);
                         self.ip += 1;
                         Ok(())
@@ -436,7 +436,7 @@ impl Mm {
         }
 
         let elapsed = time.elapsed().as_micros();
-        println!("Execution of the program took: {elapsed} microseconds");
+        println!("Execution of the program took: {elapsed}ms");
 
         Ok(())
     }
@@ -452,15 +452,13 @@ impl Mm {
         }
 
         let elapsed = time.elapsed().as_micros();
-        println!("Compiling to binary took: {elapsed} microseconds");
+        println!("Compiling to binary took: {elapsed}ms");
 
         Ok(())
     }
 
-    pub fn from_binary(file_path: &str) -> MResult<Mm> {
-        use std::fs::read;
-
-        let buf = read(file_path).map_err(|err| {
+    pub fn from_binary(file_path: &str) -> MResult::<Mm> {
+        let buf = std::fs::read(file_path).map_err(|err| {
             eprintln!("Failed to read file: {file_path}: {err}");
             err
         }).unwrap();
@@ -474,18 +472,18 @@ impl Mm {
                 InstType::LABEL => { labels.insert(inst.val.string().to_owned(), ip); }
                 _ => {}
             };
-            program.push(((ip, 69), inst));
-            ip += 1;
+            program.push(((69, 69), inst));
             i += size;
+            ip += 1;
         }
 
         if matches!(program.last(), Some(last) if last.1.typ != InstType::HALT) {
             let inst = Inst { typ: InstType::HALT, val: InstValue::None };
-            program.push(((ip + 1, 69), inst));
+            program.push(((69, 69), inst));
         }
 
         let elapsed = time.elapsed().as_micros();
-        println!("Compiling from binary took: {elapsed} microseconds");
+        println!("Compiling from binary took: {elapsed}ms");
 
         let mm = Mm {
             file_path: file_path.to_owned(),

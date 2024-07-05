@@ -1,0 +1,57 @@
+#COS x out {
+    push x
+
+    ; x^2
+    dup 0
+    dup 0
+    fmul
+
+    push 1.0
+
+    ; x^2 / -2!
+    dup 1
+    push -2.0
+    fdiv
+    fadd
+
+    ; x^4 / 4!
+    dup 1
+    dup 1
+    fmul
+    push 24.0
+    fdiv
+    fsub
+
+    ; x^6 / 6!
+    dup 1
+    dup 1
+    fmul
+    push 720.0
+    fdiv
+    fadd
+
+    ; x^8 / 8!
+    dup 1
+    dup 1
+    fmul
+    push 40320.0
+    fdiv
+    fsub
+
+    ; x^10 / 10!
+    dup 1
+    dup 1
+    fmul
+    push 3628800.0
+    fdiv
+    fadd
+
+    dmp out
+}
+
+#SYS_STDOUT 1
+#ANGLE 0.6283185307179586
+
+_start:
+    COS ANGLE SYS_STDOUT
+    halt

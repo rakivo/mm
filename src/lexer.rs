@@ -6,9 +6,7 @@ use std::{
     iter::{Enumerate, Peekable},
 };
 
-#[allow(unused)]
 mod lexer {
-    pub type Result<T> = std::result::Result<T, ()>;
     pub type Iterator<'a> = std::vec::IntoIter<(usize, &'a str)>;
 }
 
@@ -187,8 +185,8 @@ impl<'a> Lexer<'a> {
 
     fn check_for_macros(&mut self, line: &'a str, row: usize) -> bool {
         if line.starts_with('#') {
-            let splitted = line[1..].split_whitespace().collect::<Vec::<_>>();
-            let typ = if splitted.len() == 2 {
+            let splitted = line[1..].split_whitespace().take_while(|x| x != &";").collect::<Vec::<_>>();
+            let typ = if splitted.len() == 2 && splitted[1] != "{" {
                 let value = splitted.get(1).map(|x| (*x).into()).expect("Expected value");
                 TokenType::Pp(PpType::SingleLine { value })
             } else if matches!(line.chars().nth(1), Some(ch) if ch == '"') {
@@ -205,9 +203,11 @@ impl<'a> Lexer<'a> {
 
                 let mut body = Vec::new();
                 while let Some((row, line)) = self.iter.next() {
-                    if line.contains('}') { break }
+                    let trimmed = line.trim();
+                    if trimmed.starts_with(';') { continue }
+                    if trimmed.contains('}') { break }
 
-                    let mut iter = Self::split_whitespace_preserve_indices(line);
+                    let mut iter = Self::split_whitespace_preserve_indices(trimmed).take_while(|x| x.1 != ";");
                     while let Some((col, t)) = iter.next() {
                         let loc = (row, col);
                         let typ = Self::type_token(t);
@@ -220,7 +220,7 @@ impl<'a> Lexer<'a> {
             };
 
             let name = line[1..].split_whitespace()
-                .skip_while(|x| *x == "#")
+                .skip_while(|x| x == &"#")
                 .take(1)
                 .collect::<Vec::<_>>()
                 .join(" ");
@@ -251,8 +251,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_line(&mut self, line: &'a str, row: usize) {
-        let mut iter = Self::split_whitespace_preserve_indices(&line).peekable();
-
+        let mut iter = Self::split_whitespace_preserve_indices(&line).take_while(|x| x.1 != ";").peekable();
         while let Some((col, t)) = iter.next() {
             let loc = (row, col);
             let typ = Self::type_token(t);

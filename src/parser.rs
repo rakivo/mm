@@ -74,32 +74,41 @@ impl Mm {
                 }
                 TokenType::Literal => {
                     let Ok(typ) = InstType::try_from(&t.val) else {
-                        panic!("SCHEISSEE: {file_path}:{r}:{c}: {v}", r = t.loc.0 + 1, c = t.loc.1, v = t.val)
+                        let trap = Trap::UndefinedSymbol(t.val.to_string());
+                        return Err(MTrap(file_path.into(), t.loc, trap))
                     };
 
                     let inst = if typ.is_arg_required() {
-                        let arg = iter.next().unwrap();
-                        let arg = get_truth(arg.as_str(), &mm);
+                        let arg_ = iter.next().unwrap();
+                        let arg = get_truth(arg_.as_str(), &mm);
 
                         let val = match typ {
-                            InstType::PUSH | InstType::CMP | InstType::DUP => {
-                                InstValue::F64 (
-                                    if arg.contains('.') {
-                                        let Ok(v) = arg.parse::<f64>() else {
-                                            panic!("{file_path}:{r}:{c}: Invalid type, expected: u64 or f64", r = t.loc.0 + 1, c = t.loc.1)
-                                        };
-                                        NaNBox(v)
-                                    } else {
-                                        let Ok(v) = arg.parse::<u64>() else {
-                                            panic!("{file_path}:{r}:{c}: Invalid type, expected: u64 or f64", r = t.loc.0 + 1, c = t.loc.1)
-                                        };
-                                        NaNBox::from_u64(v)
-                                    }
-                                )
-                            },
+                            InstType::PUSH | InstType::CMP => {
+                                if arg.contains('.') {
+                                    let Ok(v) = arg.parse::<f64>() else {
+                                        let trap = Trap::InvalidType(arg.to_string(), "u64 or f64".to_owned());
+                                        return Err(MTrap(file_path.into(), t.loc, trap))
+                                    };
+                                    InstValue::NaN(NaNBox(v))
+                                } else {
+                                    let Ok(v) = arg.parse::<u64>() else {
+                                        let trap = Trap::InvalidType(arg.to_string(), "u64 or f64".to_owned());
+                                        return Err(MTrap(file_path.into(), t.loc, trap))
+                                    };
+                                    InstValue::NaN(NaNBox::from_u64(v))
+                                }
+                            }
+                            InstType::DUP => {
+                                let Ok(v) = arg.parse::<u64>() else {
+                                    let trap = Trap::InvalidType(arg.to_string(), "u64 or f64".to_owned());
+                                    return Err(MTrap(file_path.into(), t.loc, trap))
+                                };
+                                InstValue::U64(v)
+                            }
                             InstType::DMP => {
                                 let Ok(v) = arg.parse::<u8>() else {
-                                    panic!("{file_path}:{r}:{c}: Invalid type, expected: u64", r = t.loc.0 + 1, c = t.loc.1)
+                                    let trap = Trap::InvalidType(arg.to_string(), "u8".to_owned());
+                                    return Err(MTrap(file_path.into(), t.loc, trap))
                                 };
                                 InstValue::U8(v)
                             }
@@ -115,7 +124,10 @@ impl Mm {
                     };
                     program.push((t.loc, inst));
                 }
-                _ => panic!("{file_path}:{r}:{c}: Undefined symbol: {s}", r = t.loc.0 + 1, c = t.loc.1, s = t.val)
+                _ => {
+                    let trap = Trap::UndefinedSymbol(t.val.to_string());
+                    return Err(MTrap(file_path.into(), t.loc, trap))
+                }
             }
         }
 
@@ -132,7 +144,7 @@ impl Mm {
         comptime_labels_check(&program, &labels, file_path.into()).unwrap_or_report();
 
         let elapsed = time.elapsed().as_micros();
-        println!("Parsing and comptime checks took: {elapsed} microseconds");
+        println!("Parsing and comptime checks took: {elapsed}ms");
 
         let mm = Mm {
             file_path: file_path.to_owned(),
