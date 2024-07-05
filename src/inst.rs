@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use crate::{NaNBox, Trap, print_oper_f};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -106,10 +105,10 @@ impl std::fmt::Display for InstType {
     }
 }
 
-impl TryFrom::<&Cow<'_, str>> for InstType {
+impl TryFrom::<&String> for InstType {
     type Error = Trap;
 
-    fn try_from(s: &Cow<'_, str>) -> Result::<Self, Self::Error> {
+    fn try_from(s: &String) -> Result::<Self, Self::Error> {
         use InstType::*;
         match s.trim() {
             "nop"   => Ok(NOP),

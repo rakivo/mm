@@ -40,3 +40,4 @@ out:
     pop
     dmp 1
     pop
+    ret

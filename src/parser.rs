@@ -33,7 +33,7 @@ fn comptime_labels_check<'a>(program: &Program, labels: &Labels, file_path: Cow<
     Ok(())
 }
 
-fn get_truth<'a>(s: &'a Cow<'a, str>, map: &'a HashMap::<String, Token<'a>>) -> &'a Cow<'a, str> {
+fn get_truth<'a>(s: &'a String, map: &'a HashMap::<String, Token>) -> &'a String {
     if let Some(truth) = map.get(&s.to_string()) {
         let TokenType::Pp(ref pp) = truth.typ else { return s };
         match pp {
@@ -57,7 +57,7 @@ impl Mm {
 
         let time = Instant::now();
 
-        let lexer = Lexer::new(&file_path, &content);
+        let lexer = Lexer::new(file_path.to_owned(), content);
         let (ts, mm) = lexer.lex_file();
 
         let mut iter = ts.into_iter();
@@ -73,14 +73,14 @@ impl Mm {
                     program.push((t.loc, inst))
                 }
                 TokenType::Literal => {
-                    let Ok(typ) = InstType::try_from(&t.val) else {
+                    let Ok(typ) = InstType::try_from(&t.val.to_string()) else {
                         let trap = Trap::UndefinedSymbol(t.val.to_string());
-                        return Err(MTrap(file_path.into(), t.loc, trap))
+                        return Err(MTrap(t.f.into(), t.loc, trap))
                     };
 
                     let inst = if typ.is_arg_required() {
                         let arg_ = iter.next().unwrap();
-                        let arg = get_truth(arg_.as_str(), &mm);
+                        let arg = get_truth(arg_.as_string(), &mm);
 
                         let val = match typ {
                             InstType::PUSH | InstType::CMP => {
@@ -131,11 +131,12 @@ impl Mm {
             }
         }
 
+
         if matches!(program.last(), Some(last) if last.1 != Inst::HALT) {
             program.push(((program.last().unwrap().0.0 + 1, 69), Inst::HALT));
         }
 
-        let labels = Mm::process_labels(&program);
+        let labels = Mm::process_labels(&program, file_path);
         let Some(entry_point) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT) else {
             let trap = Trap::NoEntryPointFound(file_path.to_owned());
             return Err(MTrap(file_path.into(), (0, 0), trap))

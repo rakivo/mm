@@ -32,3 +32,4 @@ $(BUILD_DIR)/demasm: mm demasm.rs
 
 clean:
 	rm -f $(BUILD_DIR)/*
+	rm -f *.bin

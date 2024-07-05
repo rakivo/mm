@@ -1,3 +1,5 @@
+#"../masm/adds.masm"
+
 ; You can define constants like in C.
 #SYS_STDOUT 1
 
@@ -12,5 +14,6 @@
 
 ; `_start` is the default entry point, which, for now, you can't change.
 _start:
+    call _start1
     write 34 35 iadd SYS_STDOUT
     ret

@@ -96,10 +96,14 @@ impl Mm {
     const STACK_CAP: usize = 8 * 1024;
     const CALL_STACK_CAP: usize = 8 * 128;
 
-    fn process_labels(program: &Program) -> Labels {
-        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (_, inst)| {
+    fn process_labels(program: &Program, f: &str) -> Labels {
+        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (loc, inst)| {
             match inst.typ {
-                InstType::LABEL => { labels.insert(inst.val.string().to_owned(), ip); }
+                InstType::LABEL => if labels.contains_key(inst.val.string()) {
+                    panic!("{f}:{r}:{c}: <-- Here, conflicting definitions of: {n:?}", n = inst.val.string(), r = loc.0 + 1, c = loc.1)
+                } else {
+                    labels.insert(inst.val.string().to_owned(), ip);
+                }
                 _ => {}
             }
             (labels, ip + 1)
@@ -115,7 +119,7 @@ impl Mm {
             } else {
                 vec![program.len() - 1].into()
             },
-            labels: Self::process_labels(&program),
+            labels: Self::process_labels(&program, file_path),
             flags: Flags::new(),
             program,
             ip: 0,
