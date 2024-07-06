@@ -28,7 +28,7 @@ fn main() {
     }
 
     let input = &args[1];
-    let mut mm = Mm::try_from_masm(&input).unwrap_or_report();
+    let mut mm = Mm::try_from_masm(&input, vec![]).unwrap_or_report();
 
     let debug = args.contains(&"-d".to_owned());
     let output = find_flag(&args, "-o");

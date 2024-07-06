@@ -1,12 +1,15 @@
 use std::{
     borrow::Cow,
-    collections::{VecDeque, HashMap}, process::exit, time::Instant
+    process::exit,
+    time::Instant,
+    fs::read_to_string,
+    collections::{VecDeque, HashMap},
 };
-use crate::{PpType, Token, NaNBox, Inst, EToken, Flags, InstType, InstValue, Labels, Lexer, MTrap, Mm, Program, TokenType, Trap, ENTRY_POINT};
+use crate::{load_lib, Externs, EToken, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, Mm, NaNBox, PpType, Program, Token, TokenType, Trap, ENTRY_POINT};
 
 pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
 
-fn comptime_labels_check<'a>(program: &Program, labels: &Labels, file_path: Cow<'a, str>) -> MMResult::<'a, ()> {
+fn comptime_labels_check<'a>(program: &Program, labels: &Labels, externs: &Externs, file_path: Cow<'a, str>) -> MMResult::<'a, ()> {
     use InstType::*;
     for ((row, col), inst) in program.iter() {
         match inst.typ {
@@ -21,7 +24,7 @@ fn comptime_labels_check<'a>(program: &Program, labels: &Labels, file_path: Cow<
             | JMP
             | CALL => {
                 let label = inst.val.string();
-                if !labels.contains_key(label) {
+                if !labels.contains_key(label) && !externs.contains_key(label) {
                     let trap = Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned());
                     return Err(MTrap(file_path, (*row, *col), trap))
                 }
@@ -46,11 +49,11 @@ fn get_truth<'a>(s: &'a String, map: &'a HashMap::<String, Token>) -> &'a String
 }
 
 impl Mm {
-    pub fn try_from_masm(file_path: &str) -> Result::<Mm, MTrap>
+    pub fn try_from_masm<'a>(file_path: &'a str, lib_paths: Vec::<&'a str>) -> Result::<Mm, MTrap<'a>>
     where
         Self: Sized
     {
-        let content = std::fs::read_to_string(&file_path).map_err(|err| {
+        let content = read_to_string(&file_path).map_err(|err| {
             eprintln!("Failed to open file: {file_path}: {err}");
             err
         }).unwrap_or_report();
@@ -112,6 +115,13 @@ impl Mm {
                                 };
                                 InstValue::U8(v)
                             }
+                            InstType::EXTERN => {
+                                let Ok(v) = iter.next().expect("Expected argument after extern").as_string().parse::<u64>() else {
+                                    let trap = Trap::InvalidType(arg.to_string(), "u64".to_owned());
+                                    return Err(MTrap(file_path.into(), t.loc, trap))
+                                };
+                                InstValue::StringU64(arg.to_owned(), v)
+                            }
                             _ => InstValue::String(arg.to_string())
                         };
 
@@ -131,7 +141,6 @@ impl Mm {
             }
         }
 
-
         if matches!(program.last(), Some(last) if last.1 != Inst::HALT) {
             program.push(((program.last().unwrap().0.0 + 1, 69), Inst::HALT));
         }
@@ -142,7 +151,10 @@ impl Mm {
             return Err(MTrap(file_path.into(), (0, 0), trap))
         };
 
-        comptime_labels_check(&program, &labels, file_path.into()).unwrap_or_report();
+        let libs = lib_paths.iter().map(|l| load_lib(l).unwrap()).collect::<Vec::<_>>();
+        let externs = Mm::process_externs(&program, &libs);
+
+        comptime_labels_check(&program, &labels, &externs, file_path.into()).unwrap_or_report();
 
         let elapsed = time.elapsed().as_micros();
         println!("Parsing and comptime checks took: {elapsed}ms");
@@ -155,6 +167,7 @@ impl Mm {
             } else {
                 vec![program.len() - 1].into()
             },
+            externs,
             labels,
             flags: Flags::new(),
             program,

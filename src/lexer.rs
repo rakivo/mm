@@ -116,14 +116,18 @@ impl Lexer {
         match &t.typ {
             Pp(pp) => {
                 match pp {
-                    Include => if let Ok(content) = read_to_string(t.val.to_string()) {
-                        let lexer = Self::new(t.val.to_string(), content);
-                        let (ets_, mut mm_) = lexer.lex_file();
-                        mm_.extend(mm.into_iter().map(|(a, b)| (a.to_owned(), b.to_owned())));
-                        *mm = mm_;
-                        ets.extend(ets_);
+                    Include => if t.val.ends_with(".masm") {
+                        if let Ok(content) = read_to_string(t.val.to_string()) {
+                            let lexer = Self::new(t.val.to_string(), content);
+                            let (ets_, mut mm_) = lexer.lex_file();
+                            mm_.extend(mm.into_iter().map(|(a, b)| (a.to_owned(), b.to_owned())));
+                            *mm = mm_;
+                            ets.extend(ets_);
+                        } else {
+                            panic!("No such file: {f}", f = t.val)
+                        }
                     } else {
-                        panic!("No such file: {f}", f = t.val)
+                        panic!("Unsupported extension: {e}", e = t.val.chars().rev().take_while(|x| x != &'.').collect::<std::string::String>().chars().rev().collect::<std::string::String>())
                     }
                     _ => {}
                 }

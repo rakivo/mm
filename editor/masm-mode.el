@@ -45,7 +45,7 @@
   (defconst masm-instructions
     '("nop" "push" "pop" "inc" "dec" "iadd" "isub" "imul" "idiv" "fadd"
       "fsub" "fmul" "fdiv" "cmp" "swap" "dup" "je" "jl" "jnge" "jg"
-      "jnle" "jne" "jz" "jnz" "jmp" "label" "bot" "dmp" "call" "ret" "halt")))
+      "jnle" "jne" "jz" "jnz" "jmp" "label" "bot" "dmp" "call" "ret" "extern" "halt")))
 
 (defconst masm-highlights
   `((,(regexp-opt masm-instructions 'symbols) . font-lock-keyword-face)

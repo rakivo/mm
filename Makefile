@@ -1,5 +1,5 @@
 DEBUG_FLAGS = -g -C "opt-level=0"
-RELEASE_FLAGS = -C "opt-level=3"
+RELEASE_FLAGS = -C "opt-level=3" -g
 LIB_FLAGS = --crate-type=rlib
 THREADS = -Z threads=10
 EDITION_FLAGS = --edition=2021

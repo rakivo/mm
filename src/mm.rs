@@ -6,6 +6,7 @@ pub mod inst;
 pub mod trap;
 pub mod lexer;
 pub mod parser;
+pub mod libloading;
 
 pub use nan::*;
 pub use flag::*;
@@ -13,6 +14,7 @@ pub use inst::*;
 pub use trap::*;
 pub use lexer::*;
 pub use parser::*;
+pub use libloading::*;
 
 const DEBUG: bool = false;
 
@@ -23,12 +25,15 @@ pub type MResult<T> = std::result::Result<T, Trap>;
 pub type Program = Vec<(Loc, Inst)>;
 
 pub type Labels = std::collections::HashMap<String, usize>;
+pub type Externs = std::collections::HashMap::<String, (*const (), usize)>;
 
 pub struct Mm {
     pub file_path: String,
 
     stack: VecDeque::<NaNBox>,
     call_stack: VecDeque::<usize>,
+
+    externs: Externs,
 
     labels: Labels,
     flags: Flags,
@@ -110,21 +115,13 @@ impl Mm {
         }).0
     }
 
-    pub fn new(program: Program, file_path: &str) -> Mm {
-        Mm {
-            file_path: file_path.to_owned(),
-            stack: VecDeque::with_capacity(Mm::STACK_CAP),
-            call_stack: if program.is_empty() {
-                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
-            } else {
-                vec![program.len() - 1].into()
-            },
-            labels: Self::process_labels(&program, file_path),
-            flags: Flags::new(),
-            program,
-            ip: 0,
-            halt: false,
-        }
+    fn process_externs(program: &Program, libs: &Vec::<*mut void>) -> Externs {
+        program.iter().filter(|x| x.1.typ == InstType::EXTERN).fold(Externs::new(), |mut exs, (_, inst)| {
+            let (sym, args_count) = inst.val.string_u64();
+            let ex = libs.iter().cloned().find_map(|l| load_sym(l, &sym).ok()).expect(&format!("No such symbol: {sym}"));
+            exs.insert(sym.to_owned(), (ex, args_count as usize));
+            exs
+        })
     }
 
     #[inline(always)]
@@ -233,7 +230,7 @@ impl Mm {
         Ok(())
     }
 
-    fn execute_instruction(&mut self, inst: Inst) -> Result<(), Trap> {
+    fn execute_instruction(&mut self, inst: Inst) -> Result::<(), Trap> {
         if DEBUG {
             println!("{ip}: {inst}", ip = self.ip);
         }
@@ -390,6 +387,11 @@ impl Mm {
                 if let Some(ip) = self.labels.get(addr) {
                     self.ip = *ip;
                     Ok(())
+                } else if let Some((..)) = self.externs.get(addr) {
+                    todo!("Calling external functions feature is unimplemented");
+                    // if self.stack.len() < *args_count { return Err(Trap::StackUnderflow(inst.typ)) }
+                    // self.ip += 1;
+                    // Ok(())
                 } else {
                     Err(Trap::InvalidFunction(addr.to_owned(), "Not found in function map".to_owned()))
                 }
@@ -497,6 +499,7 @@ impl Mm {
             } else {
                 VecDeque::with_capacity(Mm::CALL_STACK_CAP)
             },
+            externs: Externs::new(),
             labels,
             flags: Flags::new(),
             program,
