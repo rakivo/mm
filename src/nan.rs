@@ -35,7 +35,7 @@ impl PartialEq for NaNBox {
 impl std::fmt::Display for NaNBox {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.get_type() {
-            Ok(Type::F64) => write!(f, "{}", self.0),
+            Ok(Type::F64) => write!(f, "{}", self.as_f64()),
             Ok(Type::I64) => write!(f, "{}", self.as_i64()),
             Ok(Type::U64) => write!(f, "{}", self.as_u64()),
             _ => todo!()

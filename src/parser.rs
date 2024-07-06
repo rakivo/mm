@@ -5,7 +5,9 @@ use std::{
     fs::read_to_string,
     collections::{VecDeque, HashMap},
 };
-use crate::{load_lib, Externs, EToken, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, Mm, NaNBox, PpType, Program, Token, TokenType, Trap, ENTRY_POINT};
+use crate::{load_lib, Externs, EToken, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, Mm, NaNBox, PpType, Program, Token, TokenType, Trap};
+
+const ENTRY_POINT: &str = "_start";
 
 pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
 
@@ -23,7 +25,7 @@ fn comptime_labels_check<'a>(program: &Program, labels: &Labels, externs: &Exter
             | JNZ
             | JMP
             | CALL => {
-                let label = inst.val.string();
+                let label = inst.val.as_string();
                 if !labels.contains_key(label) && !externs.contains_key(label) {
                     let trap = Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned());
                     return Err(MTrap(file_path, (*row, *col), trap))
@@ -94,11 +96,11 @@ impl Mm {
                                     };
                                     InstValue::NaN(NaNBox(v))
                                 } else {
-                                    let Ok(v) = arg.parse::<u64>() else {
-                                        let trap = Trap::InvalidType(arg.to_string(), "u64 or f64".to_owned());
+                                    let Ok(v) = arg.parse::<i64>() else {
+                                        let trap = Trap::InvalidType(arg.to_string(), "u64, i64 or f64".to_owned());
                                         return Err(MTrap(file_path.into(), t.loc, trap))
                                     };
-                                    InstValue::NaN(NaNBox::from_u64(v))
+                                    InstValue::NaN(NaNBox::from_i64(v))
                                 }
                             }
                             InstType::DUP => {

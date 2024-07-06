@@ -9,6 +9,7 @@
 
 _start1:
     write 666 246 isub 1
+
     jmp faddin
 
 faddin:

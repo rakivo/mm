@@ -18,8 +18,6 @@ pub use libloading::*;
 
 const DEBUG: bool = false;
 
-const ENTRY_POINT: &str = "_start";
-
 pub type MResult<T> = std::result::Result<T, Trap>;
 
 pub type Program = Vec<(Loc, Inst)>;
@@ -42,29 +40,6 @@ pub struct Mm {
     halt: bool,
 }
 
-#[inline]
-fn print_oper_f(f: &mut std::fmt::Formatter<'_>, oper: &NaNBox) -> std::fmt::Result {
-    match oper.get_type().unwrap() {
-        Type::F64 => write!(f, "{f}", f = oper.as_f64()),
-        Type::I64 => write!(f, "{f}", f = oper.as_i64()),
-        Type::U64 => write!(f, "{f}", f = oper.as_u64()),
-        _ => todo!()
-    }
-}
-
-#[inline]
-fn print_oper_s<S>(mut s: S, oper: &NaNBox) -> std::io::Result::<()>
-where
-    S: std::io::Write
-{
-    match oper.get_type().unwrap() {
-        Type::F64 => write!(s, "{f}", f = oper.as_f64()),
-        Type::I64 => write!(s, "{f}", f = oper.as_i64()),
-        Type::U64 => write!(s, "{f}", f = oper.as_u64()),
-        _ => todo!()
-    }
-}
-
 impl std::fmt::Debug for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack size: {size}\n", size = self.stack.len())?;
@@ -72,8 +47,7 @@ impl std::fmt::Debug for Mm {
         let mut i = 0;
         while i < self.stack.len() {
             let oper = self.stack[i];
-            write!(f, ", ")?;
-            print_oper_f(f, &oper)?;
+            write!(f, ", {oper}")?;
             i += 1;
         }
         Ok(())
@@ -84,12 +58,11 @@ impl std::fmt::Display for Mm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: ")?;
         if let Some(first) = self.stack.front() {
-            print_oper_f(f, &first)?;
+            write!(f, "{first}")?;
             let (mut i, n) = (1, self.stack.len());
             while i < n {
                 let oper = self.stack[i];
-                write!(f, ", ")?;
-                print_oper_f(f, &oper)?;
+                write!(f, ", {oper}")?;
                 i += 1;
             }
         }
@@ -104,10 +77,10 @@ impl Mm {
     fn process_labels(program: &Program, f: &str) -> Labels {
         program.iter().fold((Labels::new(), 0), |(mut labels, ip), (loc, inst)| {
             match inst.typ {
-                InstType::LABEL => if labels.contains_key(inst.val.string()) {
-                    panic!("{f}:{r}:{c}: <-- Here, conflicting definitions of: {n:?}", n = inst.val.string(), r = loc.0 + 1, c = loc.1)
+                InstType::LABEL => if labels.contains_key(inst.val.as_string()) {
+                    panic!("{f}:{r}:{c}: <-- Here, conflicting definitions of: {n:?}", n = inst.val.as_string(), r = loc.0 + 1, c = loc.1)
                 } else {
-                    labels.insert(inst.val.string().to_owned(), ip);
+                    labels.insert(inst.val.as_string().to_owned(), ip);
                 }
                 _ => {}
             }
@@ -117,7 +90,7 @@ impl Mm {
 
     fn process_externs(program: &Program, libs: &Vec::<*mut void>) -> Externs {
         program.iter().filter(|x| x.1.typ == InstType::EXTERN).fold(Externs::new(), |mut exs, (_, inst)| {
-            let (sym, args_count) = inst.val.string_u64();
+            let (sym, args_count) = inst.val.as_string_u64();
             let ex = libs.iter().cloned().find_map(|l| load_sym(l, &sym).ok()).expect(&format!("No such symbol: {sym}"));
             exs.insert(sym.to_owned(), (ex, args_count as usize));
             exs
@@ -140,7 +113,7 @@ impl Mm {
             FSUB => prelast.0 -= last.0,
             FMUL => prelast.0 *= last.0,
             FDIV => prelast.0 /= last.0,
-            _ => unreachable!(),
+            _ => unreachable!()
         }
 
         Ok(())
@@ -150,26 +123,25 @@ impl Mm {
         assert!(self.stack.len() > 0);
 
         let prelast = self.stack.back_mut().unwrap();
-        let (Some(a), Some(b)) = (prelast.get_u64(), last.get_u64()) else {
+        let (Some(a), Some(b)) = (prelast.get_i64(), last.get_i64()) else {
             return Err(Trap::OperationWithDifferentTypes(prelast.get_type(), last.get_type()))
         };
 
         use InstType::*;
         match inst {
-            IADD => { *prelast = NaNBox::from_u64(a + b); }
-            ISUB => { *prelast = NaNBox::from_u64(a - b); }
-            IMUL => { *prelast = NaNBox::from_u64(a * b); }
+            IADD => { *prelast = NaNBox::from_i64(a + b); }
+            ISUB => { *prelast = NaNBox::from_i64(a - b); }
+            IMUL => { *prelast = NaNBox::from_i64(a * b); }
             IDIV => {
                 if b != 0 {
-                    *prelast = NaNBox::from_u64(a / b);
+                    *prelast = NaNBox::from_i64(a / b);
                 } else {
                     return Err(Trap::DivisionByZero(inst))
                 }
             }
-            _ => unreachable!(),
+            _ => unreachable!()
         }
-
-        *prelast = NaNBox(NaNBox::set_type(prelast.0, Type::U64));
+        *prelast = NaNBox(NaNBox::set_type(prelast.0, Type::I64));
 
         Ok(())
     }
@@ -240,9 +212,9 @@ impl Mm {
             NOP => Ok(()),
 
             PUSH => {
-                let oper = inst.val.nan();
+                let oper = inst.val.as_nan();
                 if self.stack.len() < Mm::STACK_CAP {
-                    self.stack.push_back(oper);
+                    self.stack.push_back(*oper);
                     self.ip += 1;
                     Ok(())
                 } else {
@@ -295,7 +267,7 @@ impl Mm {
             FDIV => self.two_opers_inst(FDIV, true, 2),
 
             CMP => {
-                let oper = inst.val.nan();
+                let oper = inst.val.as_nan();
                 if let Some(ref last) = self.stack.back() {
                     self.flags.cmp(&last.as_u64(), &oper.as_u64());
                     self.ip += 1;
@@ -306,10 +278,10 @@ impl Mm {
             }
 
             DUP => {
-                let oper = inst.val.u64_();
-                if self.stack.len() > oper as usize {
+                let oper = inst.val.as_u64();
+                if self.stack.len() > *oper as usize {
                     if self.stack.len() < Mm::STACK_CAP {
-                        let val = self.stack[self.stack.len() - 1 - oper as usize];
+                        let val = self.stack[self.stack.len() - 1 - *oper as usize];
                         self.stack.push_back(val);
                         self.ip += 1;
                         Ok(())
@@ -328,10 +300,10 @@ impl Mm {
             | JNE
             | JNLE
             | JZ
-            | JNZ => self.jump_if_flag(inst.val.string(), Flag::try_from(&inst.typ).unwrap()),
+            | JNZ => self.jump_if_flag(inst.val.as_string(), Flag::try_from(&inst.typ).unwrap()),
 
             JMP => {
-                let label = inst.val.string();
+                let label = inst.val.as_string();
                 let Some(ip) = self.labels.get(label) else {
                     return Err(Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned()))
                 };
@@ -361,10 +333,12 @@ impl Mm {
             }
 
             DMP => if let Some(last) = self.stack.back() {
-                let stream = inst.val.u8_();
+                use std::io::Write;
+
+                let stream = inst.val.as_u8();
                 match stream {
-                    1 => print_oper_s(std::io::stdout(), last).unwrap(),
-                    2 => print_oper_s(std::io::stderr(), last).unwrap(),
+                    1 => write!(std::io::stdout(), "{last}").unwrap(),
+                    2 => write!(std::io::stderr(), "{last}").unwrap(),
                     _ => return Err(Trap::InvalidOperand(inst.to_string()))
                 }
                 self.ip += 1;
@@ -375,7 +349,7 @@ impl Mm {
             }
 
             CALL => {
-                let addr = inst.val.string();
+                let addr = inst.val.as_string();
                 if self.program.len() > self.ip {
                     if self.call_stack.len() < Self::CALL_STACK_CAP {
                         self.call_stack.push_back(self.ip + 1);
@@ -475,7 +449,7 @@ impl Mm {
         while i < buf.len() {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst.typ {
-                InstType::LABEL => { labels.insert(inst.val.string().to_owned(), ip); }
+                InstType::LABEL => { labels.insert(inst.val.as_string().to_owned(), ip); }
                 _ => {}
             };
             program.push(((69, 69), inst));
