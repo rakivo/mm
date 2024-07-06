@@ -33,6 +33,13 @@ pub enum InstType {
     JMP,
     LABEL,
 
+    F2I,
+    F2U,
+    I2F,
+    I2U,
+    U2I,
+    U2F,
+
     BOT,
     DMP,
     CALL,
@@ -95,6 +102,12 @@ impl std::fmt::Display for InstType {
             InstType::JNZ    => write!(f, "jnz"),
             InstType::JMP    => write!(f, "jmp"),
             InstType::LABEL  => write!(f, "label"),
+            InstType::F2I    => write!(f, "f2i"),
+            InstType::F2U    => write!(f, "f2u"),
+            InstType::I2F    => write!(f, "i2f"),
+            InstType::I2U    => write!(f, "i2u"),
+            InstType::U2I    => write!(f, "u2i"),
+            InstType::U2F    => write!(f, "u2f"),
             InstType::BOT    => write!(f, "bot"),
             InstType::DMP    => write!(f, "dmp"),
             InstType::CALL   => write!(f, "call"),
@@ -142,6 +155,12 @@ impl TryFrom::<&String> for InstType {
             "call"   => Ok(CALL),
             "ret"    => Ok(RET),
             "extern" => Ok(EXTERN),
+            "f2i"    => Ok(F2I),
+            "f2u"    => Ok(F2U),
+            "i2f"    => Ok(I2F),
+            "i2u"    => Ok(I2U),
+            "u2i"    => Ok(U2I),
+            "u2f"    => Ok(U2F),
             "halt"   => Ok(HALT),
             _        => Err(Trap::UndefinedSymbol(s.to_string()))
         }
@@ -248,6 +267,14 @@ impl TryFrom::<InstType> for Inst {
             InstType::SWAP => Ok(Self::SWAP),
             InstType::BOT  => Ok(Self::BOT),
             InstType::RET  => Ok(Self::RET),
+
+            InstType::F2I  => Ok(Self::F2I),
+            InstType::F2U  => Ok(Self::F2U),
+            InstType::I2F  => Ok(Self::I2F),
+            InstType::I2U  => Ok(Self::I2U),
+            InstType::U2I  => Ok(Self::U2I),
+            InstType::U2F  => Ok(Self::U2F),
+
             InstType::HALT => Ok(Self::HALT),
             _ => Err(())
         }
@@ -275,6 +302,12 @@ impl Inst {
     _decl_const_!{FDIV}
     _decl_const_!{SWAP}
     _decl_const_!{BOT}
+    _decl_const_!{F2I}
+    _decl_const_!{F2U}
+    _decl_const_!{I2F}
+    _decl_const_!{I2U}
+    _decl_const_!{U2I}
+    _decl_const_!{U2F}
     _decl_const_!{RET}
     _decl_const_!{HALT}
     pub const SIZE: usize = 8;
@@ -416,6 +449,12 @@ impl Inst {
             InstType::CALL   => extend_to_bytes_string(28, self.val.as_string()),
             InstType::RET    => vec![29],
             InstType::EXTERN => vec![30],
+            InstType::F2I    => vec![31],
+            InstType::F2U    => vec![32],
+            InstType::I2F    => vec![33],
+            InstType::I2U    => vec![34],
+            InstType::U2I    => vec![35],
+            InstType::U2F    => vec![36],
             InstType::HALT   => vec![69],
         }
     }
@@ -490,38 +529,44 @@ impl std::fmt::Display for Inst {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let oper = &self.val;
         match self.typ {
-            InstType::NOP    => write!(f, "Instruction: `NOP`"),
-            InstType::PUSH   => { write!(f, "Instruction: `PUSH`, operand: `{oper}`") }
-            InstType::POP    => write!(f, "Instruction: `POP`"),
-            InstType::INC    => write!(f, "Instruction: `INC`"),
-            InstType::DEC    => write!(f, "Instruction: `DEC`"),
-            InstType::IADD   => write!(f, "Instruction: `IADD`"),
-            InstType::ISUB   => write!(f, "Instruction: `ISUB`"),
-            InstType::IMUL   => write!(f, "Instruction: `IMUL`"),
-            InstType::IDIV   => write!(f, "Instruction: `IDIV`"),
-            InstType::FADD   => write!(f, "Instruction: `FADD`"),
-            InstType::FSUB   => write!(f, "Instruction: `FSUB`"),
-            InstType::FMUL   => write!(f, "Instruction: `FMUL`"),
-            InstType::FDIV   => write!(f, "Instruction: `FDIV`"),
-            InstType::CMP    => { write!(f, "Instruction: `CMP`, operand: `{oper}`") }
-            InstType::SWAP   => write!(f, "Instruction: `SWAP`"),
-            InstType::DUP    => { write!(f, "Instruction: `DUP`, operand: `{oper}`", oper =  self.val.as_u64()) }
-            InstType::JE     => write!(f, "Instruction: `JE`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JL     => write!(f, "Instruction: `JL`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JNGE   => write!(f, "Instruction: `JNGE`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JG     => write!(f, "Instruction: `JG`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JNLE   => write!(f, "Instruction: `JNLE`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JNE    => write!(f, "Instruction: `JNE`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JZ     => write!(f, "Instruction: `JZ`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JNZ    => write!(f, "Instruction: `JNZ`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JMP    => write!(f, "Instruction: `JMP`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::LABEL  => write!(f, "Instruction: `LABEL`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::CALL   => write!(f, "Instruction: `CALL`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::BOT    => write!(f, "Instruction: `BOT`"),
-            InstType::RET    => write!(f, "Instruction: `RET`"),
-            InstType::DMP    => write!(f, "Instruction: `DMP`, operand: {oper}", oper = self.val.as_u8()),
-            InstType::EXTERN => write!(f, "Instruction: `DMP`, operand: {oper}", oper = self.val.as_string()),
-            InstType::HALT   => write!(f, "Instruction: `HALT`"),
+            InstType::NOP    => write!(f, "`NOP`"),
+            InstType::PUSH   => { write!(f, "`PUSH`, operand: `{oper}`") }
+            InstType::POP    => write!(f, "`POP`"),
+            InstType::INC    => write!(f, "`INC`"),
+            InstType::DEC    => write!(f, "`DEC`"),
+            InstType::IADD   => write!(f, "`IADD`"),
+            InstType::ISUB   => write!(f, "`ISUB`"),
+            InstType::IMUL   => write!(f, "`IMUL`"),
+            InstType::IDIV   => write!(f, "`IDIV`"),
+            InstType::FADD   => write!(f, "`FADD`"),
+            InstType::FSUB   => write!(f, "`FSUB`"),
+            InstType::FMUL   => write!(f, "`FMUL`"),
+            InstType::FDIV   => write!(f, "`FDIV`"),
+            InstType::CMP    => { write!(f, "`CMP`, operand: `{oper}`") }
+            InstType::SWAP   => write!(f, "`SWAP`"),
+            InstType::DUP    => { write!(f, "`DUP`, operand: `{oper}`", oper =  self.val.as_u64()) }
+            InstType::JE     => write!(f, "`JE`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JL     => write!(f, "`JL`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JNGE   => write!(f, "`JNGE`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JG     => write!(f, "`JG`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JNLE   => write!(f, "`JNLE`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JNE    => write!(f, "`JNE`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JZ     => write!(f, "`JZ`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JNZ    => write!(f, "`JNZ`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JMP    => write!(f, "`JMP`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::LABEL  => write!(f, "`LABEL`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::CALL   => write!(f, "`CALL`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::F2I    => write!(f, "`F2I`"),
+            InstType::F2U    => write!(f, "`F2U`"),
+            InstType::I2F    => write!(f, "`I2F`"),
+            InstType::I2U    => write!(f, "`I2U`"),
+            InstType::U2I    => write!(f, "`U2I`"),
+            InstType::U2F    => write!(f, "`U2F`"),
+            InstType::BOT    => write!(f, "`BOT`"),
+            InstType::RET    => write!(f, "`RET`"),
+            InstType::DMP    => write!(f, "`DMP`, operand: {oper}", oper = self.val.as_u8()),
+            InstType::EXTERN => write!(f, "`DMP`, operand: {oper}", oper = self.val.as_string()),
+            InstType::HALT   => write!(f, "`HALT`"),
         }
     }
 }

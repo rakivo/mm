@@ -30,6 +30,8 @@
 ;; Major Mode for editing MASM Assembly Code. The language for a
 ;; simple Virtual Machine.
 
+;;; masm-mode.el --- Major Mode for editing MASM Assembly Code -*- lexical-binding: t -*-
+
 (defconst masm-mode-syntax-table
   (with-syntax-table (copy-syntax-table)
     (modify-syntax-entry ?\; "<")
@@ -45,7 +47,7 @@
   (defconst masm-instructions
     '("nop" "push" "pop" "inc" "dec" "iadd" "isub" "imul" "idiv" "fadd"
       "fsub" "fmul" "fdiv" "cmp" "swap" "dup" "je" "jl" "jnge" "jg"
-      "jnle" "jne" "jz" "jnz" "jmp" "label" "bot" "dmp" "call" "ret" "extern" "halt")))
+      "jnle" "jne" "jz" "jnz" "jmp" "label" "bot" "dmp" "call" "ret" "extern" "f2i" "f2u" "i2f" "i2u" "u2i" "u2f" "halt")))
 
 (defconst masm-highlights
   `((,(regexp-opt masm-instructions 'symbols) . font-lock-keyword-face)
@@ -56,7 +58,9 @@
 (define-derived-mode masm-mode prog-mode "masm"
   "Major Mode for editing MASM Assembly Code."
   (setq font-lock-defaults '(masm-highlights))
-  (set-syntax-table masm-mode-syntax-table))
+  (set-syntax-table masm-mode-syntax-table)
+  (setq-local comment-start ";")
+  (setq-local comment-end ""))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.\\(b\\|h\\)asm\\'" . masm-mode))

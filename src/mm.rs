@@ -70,6 +70,32 @@ impl std::fmt::Display for Mm {
     }
 }
 
+macro_rules! convert {
+    ($s: expr, $inst: expr, $f: tt, $f1: tt) => {
+        if let Some(l) = $s.stack.pop_back() {
+            let v = l.$f();
+            $s.stack.push_back(NaNBox::$f1(v as _));
+            $s.ip += 1;
+            Ok(())
+        } else {
+            Err(Trap::StackUnderflow($inst.typ))
+        }
+    };
+    (i.$s: expr, $inst: expr, $f1: tt, $m: expr, $f2: tt, $t1: tt, $t2: tt) => {
+        if let Some(l) = $s.stack.pop_back() {
+            let v = l.$f1();
+            if v < $m {
+                return Err(Trap::FailedConversion(l, Type::$t1, Type::$t2))
+            }
+            $s.stack.push_back(NaNBox::$f2(v as _));
+            $s.ip += 1;
+            Ok(())
+        } else {
+            Err(Trap::StackUnderflow($inst.typ))
+        }
+    };
+}
+
 impl Mm {
     const STACK_CAP: usize = 8 * 1024;
     const CALL_STACK_CAP: usize = 8 * 128;
@@ -318,18 +344,16 @@ impl Mm {
                 }
             }
 
-            BOT => {
-                if let Some(first) = self.stack.front() {
-                    if self.stack.len() < Mm::STACK_CAP {
-                        self.stack.push_back(*first);
-                        self.ip += 1;
-                        Ok(())
-                    } else {
-                        Err(Trap::StackOverflow(inst.typ))
-                    }
+            BOT => if let Some(first) = self.stack.front() {
+                if self.stack.len() < Mm::STACK_CAP {
+                    self.stack.push_back(*first);
+                    self.ip += 1;
+                    Ok(())
                 } else {
-                    Err(Trap::StackUnderflow(inst.typ))
+                    Err(Trap::StackOverflow(inst.typ))
                 }
+            } else {
+                Err(Trap::StackUnderflow(inst.typ))
             }
 
             DMP => if let Some(last) = self.stack.back() {
@@ -379,6 +403,13 @@ impl Mm {
                     Err(Trap::CallStackUnderflow(inst))
                 }
             }
+
+            F2I => convert!(self, inst, as_f64, from_i64),
+            F2U => convert!(i.self, inst, as_f64, 0.0, from_u64, F64, U64),
+            I2F => convert!(i.self, inst, as_i64, 0, from_f64, I64, F64),
+            I2U => convert!(i.self, inst, as_i64, 0, from_u64, I64, U64),
+            U2I => convert!(self, inst, as_u64, from_i64),
+            U2F => convert!(self, inst, as_u64, from_f64),
 
             HALT => {
                 self.halt = true;
@@ -506,6 +537,7 @@ impl Mm {
     (#12) Implement proper errors and do not just `panic!`, even more embed lexer into the VM, to get even better error messages.
     (#13) Allow use of macros inside of macros.
     (#14) Introduce notes to errors.
+    (#15) Check types more pedantically while performing converting operations.
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
     2. Introduce MasmTranslator struct, that translates masm and report errors proper way.

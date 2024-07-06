@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use crate::{Inst, Loc, InstType, Type};
+use crate::{NaNBox, Inst, Loc, InstType, Type};
 
 #[derive(Clone)]
 pub enum Trap {
@@ -15,6 +15,7 @@ pub enum Trap {
     InvalidType(String, String),
     InvalidLabel(String, String),
     InvalidFunction(String, String),
+    FailedConversion(NaNBox, Type, Type),
     OperationWithDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
 }
 
@@ -34,6 +35,7 @@ impl std::fmt::Debug for Trap {
             NoEntryPointFound(file_path)          => write!(f, "No entry point found in: {file_path}"),
             IllegalInstructionAccess              => write!(f, "Illegal instruction access"),
             InvalidType(of, expected)             => write!(f, "Invalid type: {of}, expected: {expected}"),
+            FailedConversion(val, t1, t2)         => write!(f, "Failed to convert: {val} from: {t1:?} to: {t2:?}"),
             OperationWithDifferentTypes(ty1, ty2) => write!(f, "Can't perform an operation with two different types, type 1: {ty1:?}, type 2: {ty2:?}")
         }
     }

@@ -1,0 +1,42 @@
+_start:
+; f2i
+    push 420.0
+    f2i
+    dmp 1
+
+; f2u
+    push 420.0
+    f2u
+    dmp 1
+
+; i2f
+    push 420
+    i2f
+    dmp 1
+
+; i2u
+    push 420
+    i2u
+    dmp 1
+
+; u2i
+    push 420
+    u2i
+    dmp 1
+
+; u2f
+    push 420
+    u2f
+    dmp 1
+
+; these will fail:
+
+    ; push -420
+    ; i2u
+    ; dmp 1
+
+    ; push -420.0
+    ; f2u
+    ; dmp 1
+
+    ret
