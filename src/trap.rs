@@ -1,26 +1,25 @@
 use std::borrow::Cow;
 use crate::{NaNBox, Inst, Loc, InstType, Type};
 
-#[derive(Clone)]
-pub enum Trap {
-    InvalidOperand(String),
+pub enum Trap<'a> {
+    InvalidOperand(&'a str),
     UndefinedSymbol(String),
     StackOverflow(InstType),
     StackUnderflow(InstType),
-    CallStackOverflow(Inst),
-    CallStackUnderflow(Inst),
+    CallStackOverflow(&'a Inst),
+    CallStackUnderflow(&'a Inst),
     DivisionByZero(InstType),
     IllegalInstructionAccess,
-    NoEntryPointFound(String),
-    InvalidLabel(String, String),
-    InvalidPpType(String, String),
+    NoEntryPointFound(&'a str),
+    InvalidLabel(&'a str, &'a str),
+    InvalidPpType(String, &'a str),
     InvalidType(NaNBox, Type, Type),
-    InvalidFunction(String, String),
+    InvalidFunction(&'a str, &'a str),
     FailedConversion(NaNBox, Type, Type),
-    OperationWithDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
+    OperationWithDifferentTypes(Type, Type)
 }
 
-impl std::fmt::Debug for Trap {
+impl std::fmt::Debug for Trap<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Trap::*;
         match self {
@@ -43,19 +42,21 @@ impl std::fmt::Debug for Trap {
     }
 }
 
-pub struct MTrap<'a>(pub Cow<'a, str>, pub Loc, pub Trap);
+pub struct MTrap<'a>(pub Cow<'a, str>, pub Loc, pub Trap<'a>);
 
-// Adding 1 to the row to convert it from 0-based indexing
 impl std::fmt::Debug for MTrap<'_> {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (file_path, loc, trap) = (&self.0, &self.1, &self.2);
+        // Adding 1 to the row to convert it from 0-based indexing
         let (row, col) = (loc.0 + 1, loc.1);
         write!(f, "{file_path}:{row}:{col}: {trap:?}")
     }
 }
 
-impl<'a> From<(Cow<'a, str>, Loc, Trap)> for MTrap<'a> {
-    fn from(t: (Cow<'a, str>, Loc, Trap)) -> Self {
+impl<'a> From<(Cow<'a, str>, Loc, Trap<'a>)> for MTrap<'a> {
+    #[inline]
+    fn from(t: (Cow<'a, str>, Loc, Trap<'a>)) -> Self {
         let (file_path, loc, trap) = (t.0, t.1, t.2);
         MTrap(file_path, loc, trap)
     }

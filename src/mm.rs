@@ -1,4 +1,4 @@
-use std::{borrow::Cow, time::Instant, collections::VecDeque};
+use std::{borrow::Cow, collections::{HashMap, VecDeque}, time::Instant};
 
 pub mod nan;
 pub mod flag;
@@ -16,17 +16,17 @@ pub use lexer::*;
 pub use parser::*;
 pub use libloading::*;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
-pub type MResult<T> = std::result::Result<T, Trap>;
+pub type MResult<'a, T> = std::result::Result<T, Trap<'a>>;
 
-pub type Program = Vec<(Loc, Inst)>;
+pub type Program = Vec::<(Loc, Inst)>;
 
-pub type Labels = std::collections::HashMap<String, usize>;
-pub type Externs = std::collections::HashMap::<String, (*const (), usize)>;
+pub type Labels = HashMap::<String, usize>;
+pub type Externs = HashMap::<String, (*const (), usize)>;
 
-pub struct Mm {
-    pub file_path: String,
+pub struct Mm<'a> {
+    pub file_path: &'a str,
 
     stack: VecDeque::<NaNBox>,
     call_stack: VecDeque::<usize>,
@@ -35,12 +35,11 @@ pub struct Mm {
 
     labels: Labels,
     flags: Flags,
-    program: Program,
     ip: usize,
     halt: bool,
 }
 
-impl std::fmt::Debug for Mm {
+impl std::fmt::Debug for Mm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack size: {size}\n", size = self.stack.len())?;
         write!(f, "stack:")?;
@@ -54,7 +53,7 @@ impl std::fmt::Debug for Mm {
     }
 }
 
-impl std::fmt::Display for Mm {
+impl std::fmt::Display for Mm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: ")?;
         if let Some(first) = self.stack.front() {
@@ -94,13 +93,12 @@ macro_rules! convert {
             $s.ip += 1;
             Ok(())
         } else {
-            Err(Trap::StackUnderflow($inst.typ))
+            Err(Trap::StackUnderflow($inst.typ.to_owned()))
         }
     };
 }
 
-impl Mm {
-    const STACK_CAP: usize = 8 * 1024;
+impl<'a> Mm<'a> {
     const CALL_STACK_CAP: usize = 8 * 128;
 
     fn process_labels(program: &Program, f: &str) -> Labels {
@@ -126,8 +124,10 @@ impl Mm {
         })
     }
 
-    fn typecheck(val: NaNBox, expected: Type) -> MResult::<()> {
-        let got = val.get_type().expect("Failed to get type");
+    // TODO: do it at comptime
+    #[inline]
+    fn typecheck(val: NaNBox, expected: Type) -> MResult::<'a, ()> {
+        let got = val.get_type().unwrap();
 
         match (&got, &expected) {
             (Type::I64, Type::I64) |
@@ -149,17 +149,15 @@ impl Mm {
         &self.halt
     }
 
-    fn two_opers_finst(&mut self, inst: InstType, last: NaNBox) -> MResult<()> {
-        assert!(self.stack.len() > 0);
-
+    #[inline]
+    fn two_opers_finst(&mut self, inst: InstType, last: NaNBox) -> MResult<'static, ()> {
         let prelast = self.stack.back_mut().unwrap();
 
-        use InstType::*;
         match inst {
-            FADD => prelast.0 += last.0,
-            FSUB => prelast.0 -= last.0,
-            FMUL => prelast.0 *= last.0,
-            FDIV => prelast.0 /= last.0,
+            InstType::FADD => prelast.0 += last.0,
+            InstType::FSUB => prelast.0 -= last.0,
+            InstType::FMUL => prelast.0 *= last.0,
+            InstType::FDIV => prelast.0 /= last.0,
             _ => unreachable!()
         }
 
@@ -167,35 +165,31 @@ impl Mm {
         Ok(())
     }
 
-    fn two_opers_iinst(&mut self, inst: InstType, last: NaNBox) -> MResult<()> {
-        assert!(self.stack.len() > 0);
-
+    fn two_opers_iinst(&mut self, inst: InstType, last: NaNBox) -> MResult<'static, ()> {
         let prelast = self.stack.back_mut().unwrap();
         let (Some(a), Some(b)) = (prelast.get_i64(), last.get_i64()) else {
-            return Err(Trap::OperationWithDifferentTypes(prelast.get_type(), last.get_type()))
+            return Err(Trap::OperationWithDifferentTypes(prelast.get_type().unwrap(), last.get_type().unwrap()))
         };
 
-        use InstType::*;
         match inst {
-            IADD => { *prelast = NaNBox::from_i64(a + b); }
-            ISUB => { *prelast = NaNBox::from_i64(a - b); }
-            IMUL => { *prelast = NaNBox::from_i64(a * b); }
-            IDIV => {
-                if b != 0 {
-                    *prelast = NaNBox::from_i64(a / b);
-                } else {
-                    return Err(Trap::DivisionByZero(inst))
-                }
+            InstType::IADD => { *prelast = NaNBox::from_i64(a + b) }
+            InstType::ISUB => { *prelast = NaNBox::from_i64(a - b) }
+            InstType::IMUL => { *prelast = NaNBox::from_i64(a * b) }
+            InstType::IDIV => if b != 0 {
+                *prelast = NaNBox::from_i64(a / b);
+            } else {
+                return Err(Trap::DivisionByZero(inst))
             }
             _ => unreachable!()
         }
-        *prelast = NaNBox(NaNBox::set_type(prelast.0, Type::I64));
 
+        *prelast = NaNBox(NaNBox::set_type(prelast.0, Type::I64));
         self.ip += 1;
+
         Ok(())
     }
 
-    fn two_opers_inst(&mut self, inst: InstType, pop: bool, typeflag: u8) -> MResult<()> {
+    fn two_opers_inst(&mut self, inst: InstType, pop: bool, typeflag: u8) -> MResult<'static, ()> {
         let stack_len = self.stack.len();
         if stack_len < 2 {
             eprintln!("ERROR: Not enough operands on the stack, needed: 2, have: {stack_len}");
@@ -206,7 +200,7 @@ impl Mm {
         let last = if pop {
             self.stack.pop_back().unwrap()
         } else {
-            self.stack[stack_len - 1].to_owned()
+            *self.stack.back().unwrap()
         };
 
         match inst {
@@ -220,15 +214,15 @@ impl Mm {
         Ok(())
     }
 
-    fn jump_if_flag(&mut self, label: &str, flag: Flag) -> Result<(), Trap> {
-        let program_len = self.program.len();
-        let Some(ip) = self.labels.get(&label.to_owned()) else {
-            return Err(Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned()))
+    fn jump_if_flag(&mut self, label: &'a str, flag: Flag, program: &'a Program) -> Result<(), Trap<'a>> {
+        let program_len = program.len();
+        let Some(ip) = self.labels.get(label) else {
+            return Err(Trap::InvalidLabel(label, "Not found in label map"))
         };
 
         if *ip >= program_len {
             eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {program_len}");
-            return Err(Trap::InvalidLabel(label.to_owned(), "Out of bounds".to_owned()))
+            return Err(Trap::InvalidLabel(label, "Out of bounds"))
         }
 
         if self.flags.is(flag) {
@@ -240,61 +234,43 @@ impl Mm {
         Ok(())
     }
 
-    fn execute_instruction(&mut self, inst: Inst) -> Result::<(), Trap> {
-        if DEBUG {
-            println!("{ip}: {inst}", ip = self.ip);
-        }
-
+    fn execute_instruction(&mut self, program: &'a Program) -> Result::<(), Trap<'a>> {
+        let inst = &program[self.ip].1;
         use InstType::*;
         match inst.typ {
-            PUSH => if self.stack.len() < Mm::STACK_CAP {
+            PUSH => {
                 self.stack.push_back(*inst.val.as_nan());
                 self.ip += 1;
                 Ok(())
-            } else {
-                Err(Trap::StackOverflow(inst.typ))
             }
 
-            POP => if !self.stack.is_empty() {
-                self.stack.pop_back();
+            POP => self.stack.pop_back().map_or(Err(Trap::StackUnderflow(inst.typ.to_owned())), |_| {
                 self.ip += 1;
                 Ok(())
-            } else {
-                Err(Trap::StackUnderflow(inst.typ))
-            }
+            }),
 
-            INC => if let Some(last) = self.stack.back_mut() {
-                let v = last.get_value();
-                *last = NaNBox::from_i64(v + 1);
+            INC => self.stack.back_mut().map_or(Err(Trap::StackUnderflow(inst.typ.to_owned())), |last| {
+                *last = NaNBox::from_i64(last.get_value() + 1);
                 self.ip += 1;
                 Ok(())
-            } else {
-                Err(Trap::StackUnderflow(inst.typ))
-            }
+            }),
 
-            DEC => if let Some(last) = self.stack.back_mut() {
-                let v = last.get_value();
-                *last = NaNBox::from_i64(v - 1);
+            DEC => self.stack.back_mut().map_or(Err(Trap::StackUnderflow(inst.typ.to_owned())), |last| {
+                *last = NaNBox::from_i64(last.get_value() - 1);
                 self.ip += 1;
                 Ok(())
-            } else {
-                Err(Trap::StackUnderflow(inst.typ))
-            }
+            }),
 
-            SWAP => if self.stack.len() > *inst.val.as_u64() as usize {
+            SWAP => {
                 let pos = *inst.val.as_u64() as usize;
+                if self.stack.len() <= pos {
+                    return Err(Trap::StackUnderflow(inst.typ.to_owned()))
+                }
+
                 let idx = self.stack.len() - pos - 1;
-
-                let b = self.stack.pop_back().unwrap();
-                let a = self.stack[idx];
-                let am = &mut self.stack[idx];
-
-                *am = b;
-                self.stack.push_back(a);
+                self.stack.swap(idx, self.stack.len() - 1);
                 self.ip += 1;
                 Ok(())
-            } else {
-                Err(Trap::StackUnderflow(inst.typ))
             }
 
             IADD => self.two_opers_inst(IADD, true, 1),
@@ -312,20 +288,19 @@ impl Mm {
                 self.ip += 1;
                 Ok(())
             } else {
-                Err(Trap::StackUnderflow(inst.typ))
+                Err(Trap::StackUnderflow(inst.typ.to_owned()))
             }
 
-            DUP => if self.stack.len() > *inst.val.as_u64() as usize {
-                if self.stack.len() < Mm::STACK_CAP {
-                    let val = self.stack[self.stack.len() - 1 - *inst.val.as_u64() as usize];
-                    self.stack.push_back(val);
-                    self.ip += 1;
-                    Ok(())
-                } else {
-                    Err(Trap::StackOverflow(inst.typ))
+            DUP => {
+                let pos = *inst.val.as_u64() as usize;
+                if self.stack.len() <= pos {
+                    return Err(Trap::StackUnderflow(inst.typ.to_owned()))
                 }
-            } else {
-                Err(Trap::StackUnderflow(inst.typ))
+                let idx = self.stack.len() - pos - 1;
+                let val = self.stack[idx];
+                self.stack.push_back(val);
+                self.ip += 1;
+                Ok(())
             }
 
               JE
@@ -335,59 +310,53 @@ impl Mm {
             | JNE
             | JNLE
             | JZ
-            | JNZ => self.jump_if_flag(inst.val.as_string(), Flag::try_from(&inst.typ).unwrap()),
+            | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
 
             JMP => {
                 let label = inst.val.as_string();
                 let Some(ip) = self.labels.get(label) else {
-                    return Err(Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned()))
+                    return Err(Trap::InvalidLabel(label, "Not found in label map"))
                 };
 
-                if *ip < self.program.len() {
+                if *ip < program.len() {
                     self.ip = *ip;
                     Ok(())
                 } else {
-                    eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {len}", len = self.program.len());
-                    Err(Trap::InvalidLabel(label.to_owned(), "Out of bounds".to_owned()))
+                    eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {len}", len = program.len());
+                    Err(Trap::InvalidLabel(label, "Out of bounds"))
                 }
             }
 
-            BOT => if let Some(first) = self.stack.front() {
-                if self.stack.len() < Mm::STACK_CAP {
-                    self.stack.push_back(*first);
-                    self.ip += 1;
-                    Ok(())
-                } else {
-                    Err(Trap::StackOverflow(inst.typ))
-                }
-            } else {
-                Err(Trap::StackUnderflow(inst.typ))
+            BOT => {
+                let Some(f) = self.stack.front() else { return Err(Trap::StackUnderflow(inst.typ.to_owned())) };
+                self.stack.push_back(*f);
+                self.ip += 1;
+                Ok(())
             }
 
             DMP => if let Some(last) = self.stack.back() {
                 use std::io::Write;
 
                 let stream = inst.val.as_u8();
-                match stream {
-                    1 => write!(std::io::stdout(), "{last}").unwrap(),
-                    2 => write!(std::io::stderr(), "{last}").unwrap(),
-                    _ => return Err(Trap::InvalidOperand(inst.to_string()))
-                }
+                let mut out = match stream {
+                    1 => std::io::stdout().lock(),
+                    2 => std::io::stdout().lock(),
+                    _ => return Err(Trap::InvalidOperand(&inst.val.as_string()))
+                };
+
+                write!(out, "{last}\n").unwrap();
+                out.flush().unwrap();
+
                 self.ip += 1;
-                println!();
                 Ok(())
             } else {
-                Err(Trap::StackUnderflow(inst.typ))
+                Err(Trap::StackUnderflow(inst.typ.to_owned()))
             }
 
             CALL => {
                 let addr = inst.val.as_string();
-                if self.program.len() > self.ip {
-                    if self.call_stack.len() < Self::CALL_STACK_CAP {
-                        self.call_stack.push_back(self.ip + 1);
-                    } else {
-                        return Err(Trap::CallStackOverflow(inst.to_owned()))
-                    }
+                if program.len() > self.ip {
+                    self.call_stack.push_back(self.ip + 1);
                 }
 
                 if let Some(ip) = self.labels.get(addr) {
@@ -399,18 +368,14 @@ impl Mm {
                     // self.ip += 1;
                     // Ok(())
                 } else {
-                    Err(Trap::InvalidFunction(addr.to_owned(), "Not found in function map".to_owned()))
+                    Err(Trap::InvalidFunction(addr, "Not found in function map"))
                 }
             }
 
-            RET => {
-                if let Some(ip) = self.call_stack.pop_back() {
-                    self.ip = ip;
-                    Ok(())
-                } else {
-                    Err(Trap::CallStackUnderflow(inst))
-                }
-            }
+            RET => self.call_stack.pop_back().map_or(Err(Trap::CallStackUnderflow(inst)), |ip| {
+                self.ip = ip;
+                Ok(())
+            }),
 
             F2I => convert!(self, inst, as_f64, from_i64, F64),
             F2U => convert!(i.self, inst, as_f64, 0.0, from_u64, F64),
@@ -431,42 +396,58 @@ impl Mm {
         }
     }
 
-    pub fn execute_program(&mut self, debug: bool, limit: Option::<usize>) -> MMResult<()> {
-        if self.program.is_empty() {
+    pub fn execute_program(&mut self, _debug: bool, limit: Option::<usize>, program: &'a Program) -> MMResult<'a, ()> {
+        if program.is_empty() {
             return Ok(())
         }
 
         let time = Instant::now();
+        let mut limit = limit.unwrap_or(usize::MAX);
+        let file_path: Cow::<str> = self.file_path.to_owned().into();
 
-        let mut count = 0;
-        let file_path: Cow<str> = self.file_path.to_owned().into();
-        let limit = limit.unwrap_or(usize::MAX);
-        while !self.halt() && count < limit {
-            let (loc, inst) = self.program[self.ip].to_owned();
-            self.execute_instruction(inst).map_err(|trap| {
+        // let mut instruction_times = HashMap::<&InstType, u128>::new();
+
+        while !self.halt() && limit > 0 {
+            let loc = program[self.ip].0;
+
+            // let inst_type = &program[self.ip].1.typ;
+            // let inst_time = Instant::now();
+
+            self.execute_instruction(program).map_err(|trap| {
                 MTrap::from((file_path.to_owned(), loc, trap))
             })?;
 
-            if debug {
-                println!("{self}");
-            }
+            // let elapsed_time = inst_time.elapsed().as_micros();
 
-            count += 1;
+            // instruction_times
+            //     .entry(inst_type)
+            //     .and_modify(|e| {
+            //     if *e < elapsed_time {
+            //         *e = elapsed_time;
+            //     }
+            // })
+            // .or_insert(elapsed_time);
+
+            limit -= 1;
         }
 
         let elapsed = time.elapsed().as_micros();
         println!("Execution of the program took: {elapsed}ms");
 
+        // for (inst_type, max_time) in &instruction_times {
+        //     println!("Max time for instruction type {inst_type}: {max_time}μs");
+        // }
+
         Ok(())
     }
 
-    pub fn to_binary(&self, file_path: &str) -> std::io::Result<()> {
+    pub fn to_binary(&self, file_path: &str, program: &'a Program) -> std::io::Result<()> {
         use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
         let time = Instant::now();
 
-        for (_, inst) in self.program.iter() {
+        for (_, inst) in program.iter() {
             f.write_all(&inst.as_bytes())?;
         }
 
@@ -478,12 +459,7 @@ impl Mm {
         Ok(())
     }
 
-    pub fn from_binary(file_path: &str) -> MResult::<Mm> {
-        let buf = std::fs::read(file_path).map_err(|err| {
-            eprintln!("Failed to read file: {file_path}: {err}");
-            err
-        }).unwrap();
-
+    pub fn from_binary(file_path: &'a str, buf: &'a Vec::<u8>) -> MResult::<'a, (Mm<'a>, Program)> {
         let time = Instant::now();
 
         let mut i = 0;
@@ -512,8 +488,8 @@ impl Mm {
         }
 
         let mm = Mm {
-            file_path: file_path.to_owned(),
-            stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            file_path,
+            stack: VecDeque::with_capacity(1024),
             call_stack: if let Some(last) = program.last() {
                 vec![last.0.0].into()
             } else {
@@ -522,21 +498,20 @@ impl Mm {
             externs: Externs::with_capacity(15),
             labels,
             flags: Flags::new(),
-            program,
             ip: 0,
             halt: false,
         };
 
-        Ok(mm)
+        Ok((mm, program))
     }
 
-    pub fn generate_masm(&self, file_path: &str) -> std::io::Result<()> {
+    pub fn generate_masm(&self, file_path: &str, program: &'a Program) -> std::io::Result<()> {
         use std::{fs::File, io::Write};
 
         let mut f = File::create(file_path)?;
         let time = Instant::now();
 
-        for inst in self.program.iter() {
+        for inst in program.iter() {
             let inst_str = format!("{inst}\n", inst = String::from(&inst.1));
             f.write_all(&inst_str.as_bytes())?;
         }
@@ -554,8 +529,6 @@ impl Mm {
     (#12) Implement proper errors and do not just `panic!`, even more embed lexer into the VM, to get even better error messages.
     (#13) Allow use of macros inside of macros.
     (#14) Introduce notes to errors.
-    (#16) Change inner buffer of `Flags` to u8.
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
-    2. Introduce MasmTranslator struct, that translates masm and report errors proper way.
 */

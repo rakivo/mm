@@ -3,9 +3,9 @@ use std::{
     process::exit,
     time::Instant,
     fs::read_to_string,
-    collections::{VecDeque, HashMap},
+    collections::VecDeque,
 };
-use crate::{DEBUG, Externs, EToken, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, Mm, NaNBox, PpType, Program, Token, TokenType, Trap, load_lib};
+use crate::{DEBUG, MacrosMap, Externs, EToken, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, Mm, NaNBox, PpType, Program, Token, TokenType, Trap, load_lib};
 
 const ENTRY_POINT: &str = "_start";
 
@@ -26,8 +26,8 @@ fn comptime_labels_check<'a>(program: &'a Program, labels: &Labels, externs: &Ex
             | JMP
             | CALL => {
                 let label = inst.val.as_string();
-                if !labels.contains_key(label) && !externs.contains_key(label) {
-                    let trap = Trap::InvalidLabel(label.to_owned(), "Not found in label map".to_owned());
+                if !labels.contains_key(label.as_str()) && !externs.contains_key(label) {
+                    let trap = Trap::InvalidLabel(label, "Not found in label map");
                     return Err(MTrap(file_path, (*row, *col), trap))
                 }
             }
@@ -38,11 +38,11 @@ fn comptime_labels_check<'a>(program: &'a Program, labels: &Labels, externs: &Ex
     Ok(())
 }
 
-fn get_truth<'a>(s: &'a String, map: &'a HashMap::<String, Token>) -> &'a String {
-    if let Some(truth) = map.get(&s.to_string()) {
+fn get_truth<'a>(s: String, map: &MacrosMap) -> String {
+    if let Some(truth) = map.get(&s) {
         let TokenType::Pp(ref pp) = truth.typ else { return s };
         match pp {
-            PpType::SingleLine { value } => get_truth(&value, map),
+            PpType::SingleLine { value } => get_truth(value.to_owned(), map),
             _ => todo!(),
         }
     } else {
@@ -50,20 +50,24 @@ fn get_truth<'a>(s: &'a String, map: &'a HashMap::<String, Token>) -> &'a String
     }
 }
 
-impl Mm {
-    pub fn try_from_masm<'a>(file_path: &'a str, lib_paths: Vec::<&'a str>) -> Result::<Mm, MTrap<'a>>
+impl<'a> Mm<'a> {
+    pub fn try_from_masm(file_path: &'a str, lib_paths: Vec::<&'a str>) -> Result::<(Mm<'a>, Program), MTrap<'a>>
     where
         Self: Sized
     {
+        // , iter: &mut CIterator<'a>
+
         let content = read_to_string(&file_path).map_err(|err| {
             eprintln!("Failed to open file: {file_path}: {err}");
             err
         }).unwrap_or_report();
 
+        let mut iter = content.lines().peekable().enumerate();
+
         let time = Instant::now();
 
-        let lexer = Lexer::new(file_path.to_owned(), content);
-        let (ts, mm) = lexer.lex_file();
+        let lexer = Lexer::new(file_path.to_owned());
+        let (ts, mm) = lexer.lex_file(&mut iter);
         if ts.is_empty() { exit(0) }
 
         // TODO: remove this scheisse
@@ -95,13 +99,13 @@ impl Mm {
                             InstType::PUSH | InstType::CMP => {
                                 if arg.contains('.') {
                                     let Ok(v) = arg.parse::<f64>() else {
-                                        let trap = Trap::InvalidPpType(arg.to_owned(), "u64 or f64".to_owned());
+                                        let trap = Trap::InvalidPpType(arg, "u64 or f64");
                                         return Err(MTrap(file_path.into(), t.loc, trap))
                                     };
                                     InstValue::NaN(NaNBox(v))
                                 } else {
                                     let Ok(v) = arg.parse::<i64>() else {
-                                        let trap = Trap::InvalidPpType(arg.to_owned(), "u64, i64 or f64".to_owned());
+                                        let trap = Trap::InvalidPpType(arg, "u64, i64 or f64");
                                         return Err(MTrap(file_path.into(), t.loc, trap))
                                     };
                                     InstValue::NaN(NaNBox::from_i64(v))
@@ -109,24 +113,24 @@ impl Mm {
                             }
                             InstType::DUP | InstType::SWAP => {
                                 let Ok(v) = arg.parse::<u64>() else {
-                                    let trap = Trap::InvalidPpType(arg.to_string(), "u64 or f64".to_owned());
+                                    let trap = Trap::InvalidPpType(arg, "u64 or f64");
                                     return Err(MTrap(file_path.into(), t.loc, trap))
                                 };
                                 InstValue::U64(v)
                             }
                             InstType::DMP => {
                                 let Ok(v) = arg.parse::<u8>() else {
-                                    let trap = Trap::InvalidPpType(arg.to_string(), "u8".to_owned());
+                                    let trap = Trap::InvalidPpType(arg, "u8");
                                     return Err(MTrap(file_path.into(), t.loc, trap))
                                 };
                                 InstValue::U8(v)
                             }
                             InstType::EXTERN => {
                                 let Ok(v) = iter.next().expect("Expected argument after extern").as_string().parse::<u64>() else {
-                                    let trap = Trap::InvalidPpType(arg.to_string(), "u64".to_owned());
+                                    let trap = Trap::InvalidPpType(arg, "u64");
                                     return Err(MTrap(file_path.into(), t.loc, trap))
                                 };
-                                InstValue::StringU64(arg.to_owned(), v)
+                                InstValue::StringU64(arg, v)
                             }
                             _ => InstValue::String(arg.to_string())
                         };
@@ -138,11 +142,11 @@ impl Mm {
                     } else {
                         Inst::try_from(typ).unwrap()
                     };
-                    prev = t.to_owned();
                     program.push((t.loc, inst));
+                    prev = t;
                 }
                 _ => {
-                    let trap = Trap::UndefinedSymbol(t.val.to_string());
+                    let trap = Trap::UndefinedSymbol(t.val);
                     return Err(MTrap(file_path.into(), t.loc, trap))
                 }
             }
@@ -153,8 +157,8 @@ impl Mm {
         }
 
         let labels = Mm::process_labels(&program, file_path);
-        let Some(entry_point) = labels.to_owned().into_iter().find(|(l, _)| *l == ENTRY_POINT) else {
-            let trap = Trap::NoEntryPointFound(file_path.to_owned());
+        let Some(entry_point) = labels.iter().find(|(l, _)| l == &&ENTRY_POINT).map(|(_, i)| *i) else {
+            let trap = Trap::NoEntryPointFound(file_path);
             return Err(MTrap(file_path.into(), (0, 0), trap))
         };
 
@@ -169,8 +173,8 @@ impl Mm {
         }
 
         let mm = Mm {
-            file_path: file_path.to_owned(),
-            stack: VecDeque::with_capacity(Mm::STACK_CAP),
+            file_path,
+            stack: VecDeque::with_capacity(1024),
             call_stack: if program.is_empty() {
                 VecDeque::with_capacity(Mm::CALL_STACK_CAP)
             } else {
@@ -179,12 +183,11 @@ impl Mm {
             externs,
             labels,
             flags: Flags::new(),
-            program,
-            ip: entry_point.1,
+            ip: entry_point,
             halt: false
         };
 
-        Ok(mm)
+        Ok((mm, program))
     }
 }
 

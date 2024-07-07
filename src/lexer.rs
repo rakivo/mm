@@ -27,10 +27,10 @@ pub enum EToken {
 }
 
 impl EToken {
-    pub fn as_string(&self) -> &String {
+    pub fn as_string(&self) -> String {
         match self {
-            EToken::Expansion(s) => s,
-            EToken::Token(t) => &t.val
+            EToken::Expansion(s) => (*s).to_owned(),
+            EToken::Token(t) => t.val.to_owned()
         }
     }
 }
@@ -82,6 +82,7 @@ impl Display for Token {
 }
 
 impl Token {
+    #[inline]
     pub fn new(f: String, loc: Loc, typ: TokenType, val: String) -> Self {
         Self { f, loc, typ, val }
     }
@@ -92,21 +93,19 @@ pub struct Lexer {
     mm: MacrosMap,
     #[allow(unused)]
     file_path: String,
-    content: String,
 }
 
-impl Lexer {
+impl<'a> Lexer {
     #[inline(always)]
     pub fn ts(&self) -> &Tokens {
         &self.ts
     }
 
-    pub fn new(file_path: String, content: String) -> Self {
+    pub fn new(file_path: String) -> Self {
         Self {
             ts: Tokens::with_capacity(100),
             mm: MacrosMap::with_capacity(15),
             file_path,
-            content
         }
     }
 
@@ -117,9 +116,10 @@ impl Lexer {
             Pp(pp) => {
                 match pp {
                     Include => if t.val.ends_with(".masm") {
-                        if let Ok(content) = read_to_string(t.val.to_string()) {
-                            let lexer = Self::new(t.val.to_string(), content);
-                            let (ets_, mut mm_) = lexer.lex_file();
+                        if let Ok(content) = read_to_string(&t.val) {
+                            let lexer = Self::new(t.val.to_string());
+                            let mut iter = content.lines().peekable().enumerate();
+                            let (ets_, mut mm_) = lexer.lex_file(&mut iter);
                             mm_.extend(mm.into_iter().map(|(a, b)| (a.to_owned(), b.to_owned())));
                             *mm = mm_;
                             ets.extend(ets_);
@@ -132,7 +132,7 @@ impl Lexer {
                     _ => {}
                 }
             }
-            _ => if let Some(m) = mm.get(&t.val.to_string()) {
+            _ => if let Some(m) = mm.get(&t.val) {
                 match &m.typ {
                     Pp(pp) => match pp {
                         Include => unreachable!(),
@@ -253,7 +253,7 @@ impl Lexer {
 
             let col = line.find(|x| x == '#').unwrap();
             let loc = (row, col);
-            let t = Token::new(self.file_path.to_owned(), loc, typ, name.to_owned().into());
+            let t = Token::new(self.file_path.to_owned(), loc, typ, name.to_owned());
             self.mm.insert(name, t.to_owned());
             self.ts.push(t);
             true
@@ -276,8 +276,8 @@ impl Lexer {
         }
     }
 
-    fn lex_line(&mut self, line: String, row: usize) {
-        let mut iter = Self::split_whitespace_preserve_indices(&line).take_while(|x| x.1 != ";").peekable();
+    fn lex_line(&mut self, line: &'a str, row: usize) {
+        let mut iter = Self::split_whitespace_preserve_indices(line).take_while(|x| x.1 != ";").peekable();
         while let Some((col, t)) = iter.next() {
             let loc = (row, col);
             let typ = Self::type_token(t);
@@ -290,14 +290,12 @@ impl Lexer {
         }
     }
 
-    pub fn lex_file(mut self) -> (ETokens, MacrosMap) {
-        let content = self.content.to_owned();
-        let mut iter = content.lines().peekable().enumerate();
+    pub fn lex_file(mut self, iter: &mut CIterator) -> (ETokens, MacrosMap) {
         while let Some((row, line)) = iter.next() {
             let trimmed = line.trim();
             if trimmed.starts_with(';') || trimmed.is_empty() { continue }
-            if !self.check_for_macros(line, row, &mut iter) {
-                self.lex_line(trimmed.to_owned(), row)
+            if !self.check_for_macros(line, row, iter) {
+                self.lex_line(trimmed, row)
             }
         }
 

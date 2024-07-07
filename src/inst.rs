@@ -1,6 +1,6 @@
 use crate::{NaNBox, Trap};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Eq, Hash, Clone, Debug, PartialEq)]
 pub enum InstType {
     NOP,
     PUSH,
@@ -50,46 +50,45 @@ pub enum InstType {
 
 impl InstType {
     pub fn try_from_string<'a>(s: &'a String) -> Result::<Self, Trap> {
-        use InstType::*;
         match s.trim() {
-            "nop"    => Ok(NOP),
-            "push"   => Ok(PUSH),
-            "pop"    => Ok(POP),
-            "inc"    => Ok(INC),
-            "dec"    => Ok(DEC),
-            "iadd"   => Ok(IADD),
-            "isub"   => Ok(ISUB),
-            "imul"   => Ok(IMUL),
-            "idiv"   => Ok(IDIV),
-            "fadd"   => Ok(FADD),
-            "fsub"   => Ok(FSUB),
-            "fmul"   => Ok(FMUL),
-            "fdiv"   => Ok(FDIV),
-            "cmp"    => Ok(CMP),
-            "swap"   => Ok(SWAP),
-            "dup"    => Ok(DUP),
-            "je"     => Ok(JE),
-            "jl"     => Ok(JL),
-            "jnge"   => Ok(JNGE),
-            "jg"     => Ok(JG),
-            "jnle"   => Ok(JNLE),
-            "jne"    => Ok(JNE),
-            "jz"     => Ok(JZ),
-            "jnz"    => Ok(JNZ),
-            "jmp"    => Ok(JMP),
-            "label"  => Ok(LABEL),
-            "bot"    => Ok(BOT),
-            "dmp"    => Ok(DMP),
-            "call"   => Ok(CALL),
-            "ret"    => Ok(RET),
-            "extern" => Ok(EXTERN),
-            "f2i"    => Ok(F2I),
-            "f2u"    => Ok(F2U),
-            "i2f"    => Ok(I2F),
-            "i2u"    => Ok(I2U),
-            "u2i"    => Ok(U2I),
-            "u2f"    => Ok(U2F),
-            "halt"   => Ok(HALT),
+            "nop"    => Ok(InstType::NOP),
+            "push"   => Ok(InstType::PUSH),
+            "pop"    => Ok(InstType::POP),
+            "inc"    => Ok(InstType::INC),
+            "dec"    => Ok(InstType::DEC),
+            "iadd"   => Ok(InstType::IADD),
+            "isub"   => Ok(InstType::ISUB),
+            "imul"   => Ok(InstType::IMUL),
+            "idiv"   => Ok(InstType::IDIV),
+            "fadd"   => Ok(InstType::FADD),
+            "fsub"   => Ok(InstType::FSUB),
+            "fmul"   => Ok(InstType::FMUL),
+            "fdiv"   => Ok(InstType::FDIV),
+            "cmp"    => Ok(InstType::CMP),
+            "swap"   => Ok(InstType::SWAP),
+            "dup"    => Ok(InstType::DUP),
+            "je"     => Ok(InstType::JE),
+            "jl"     => Ok(InstType::JL),
+            "jnge"   => Ok(InstType::JNGE),
+            "jg"     => Ok(InstType::JG),
+            "jnle"   => Ok(InstType::JNLE),
+            "jne"    => Ok(InstType::JNE),
+            "jz"     => Ok(InstType::JZ),
+            "jnz"    => Ok(InstType::JNZ),
+            "jmp"    => Ok(InstType::JMP),
+            "label"  => Ok(InstType::LABEL),
+            "bot"    => Ok(InstType::BOT),
+            "dmp"    => Ok(InstType::DMP),
+            "call"   => Ok(InstType::CALL),
+            "ret"    => Ok(InstType::RET),
+            "extern" => Ok(InstType::EXTERN),
+            "f2i"    => Ok(InstType::F2I),
+            "f2u"    => Ok(InstType::F2U),
+            "i2f"    => Ok(InstType::I2F),
+            "i2u"    => Ok(InstType::I2U),
+            "u2i"    => Ok(InstType::U2I),
+            "u2f"    => Ok(InstType::U2F),
+            "halt"   => Ok(InstType::HALT),
             _        => Err(Trap::UndefinedSymbol(s.to_owned()))
         }
     }
@@ -163,7 +162,7 @@ impl std::fmt::Display for InstType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub enum InstValue {
     U8(u8),
     NaN(NaNBox),
@@ -175,7 +174,7 @@ pub enum InstValue {
     None
 }
 
-macro_rules! match_shit {
+macro_rules! _display_match_shit {
     ($s: expr, $f: expr, $($v: tt), *) => {
         match $s {
             $(Self::$v(v) => write!($f, "{v}"),)*
@@ -189,14 +188,14 @@ impl std::fmt::Display for InstValue {
         if let Self::StringU64(s, v) = self {
             write!(f, "{s}, {v}")
         } else {
-            match_shit!(self, f, U8, NaN, F64, I64, U64, String)
+            _display_match_shit!(self, f, U8, NaN, F64, I64, U64, String)
         }
     }
 }
 
 macro_rules! _decl_ {
     (g.$name: tt, $ty: ty, $vty: tt) => {
-        #[inline]
+        #[inline(always)]
         pub fn $name(&self) -> Option::<&$ty> {
             match self {
                 InstValue::$vty(ret) => Some(ret),
@@ -205,7 +204,7 @@ macro_rules! _decl_ {
         }
     };
     (a.$name: tt, $fn: tt, $ty: ty) => {
-        #[inline]
+        #[inline(always)]
         #[track_caller]
         pub fn $name(&self) -> $ty {
             self.$fn().unwrap()
@@ -228,7 +227,7 @@ impl InstValue {
     _decl_!{a.as_string, get_string, &String}
     _decl_!{a.as_string_u64, get_string_u64, (&String, u64)}
 
-    #[inline]
+    #[inline(always)]
     pub fn get_string_u64(&self) -> Option::<(&String, u64)> {
         match self {
             InstValue::StringU64(s, u) => Some((s, *u)),
@@ -237,42 +236,33 @@ impl InstValue {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub struct Inst {
     pub typ: InstType,
     pub val: InstValue
+}
+
+impl PartialEq for Inst {
+    #[inline(always)]
+    fn eq(&self, other: &Self) -> bool {
+        self.typ == other.typ
+    }
+}
+
+macro_rules! _match_typeshit {
+    ($t_: expr, $($t: tt), *) => {
+        match $t_ {
+            $(InstType::$t => Ok(Self::$t),)*
+            _ => Err(())
+        }
+    };
 }
 
 impl TryFrom::<InstType> for Inst {
     type Error = ();
 
     fn try_from(typ: InstType) -> Result<Self, Self::Error> {
-        match typ {
-            InstType::NOP  => Ok(Self::NOP),
-            InstType::POP  => Ok(Self::POP),
-            InstType::INC  => Ok(Self::INC),
-            InstType::DEC  => Ok(Self::DEC),
-            InstType::IADD => Ok(Self::IADD),
-            InstType::ISUB => Ok(Self::ISUB),
-            InstType::IMUL => Ok(Self::IMUL),
-            InstType::IDIV => Ok(Self::IDIV),
-            InstType::FADD => Ok(Self::FADD),
-            InstType::FSUB => Ok(Self::FSUB),
-            InstType::FMUL => Ok(Self::FMUL),
-            InstType::FDIV => Ok(Self::FDIV),
-            InstType::BOT  => Ok(Self::BOT),
-            InstType::RET  => Ok(Self::RET),
-
-            InstType::F2I  => Ok(Self::F2I),
-            InstType::F2U  => Ok(Self::F2U),
-            InstType::I2F  => Ok(Self::I2F),
-            InstType::I2U  => Ok(Self::I2U),
-            InstType::U2I  => Ok(Self::U2I),
-            InstType::U2F  => Ok(Self::U2F),
-
-            InstType::HALT => Ok(Self::HALT),
-            _ => Err(())
-        }
+        _match_typeshit! {typ, NOP, POP, INC, DEC, IADD, ISUB, IMUL, IDIV, FADD, FSUB, FMUL, FDIV, BOT, RET, F2I, F2U, I2F, I2U, U2I, U2F, HALT}
     }
 }
 
@@ -310,6 +300,7 @@ impl Inst {
 const _: () = assert!(std::mem::size_of::<f64>() == Inst::SIZE, "Mm's designed to be working on 64bit");
 const INSTRUCTION_PART: usize = Inst::SIZE + 1;
 
+#[inline]
 fn extend_from_bytes_u64(n: u8, val: u64) -> Vec::<u8> {
     let mut bytes = Vec::with_capacity(INSTRUCTION_PART);
     bytes.push(n);
@@ -318,6 +309,7 @@ fn extend_from_bytes_u64(n: u8, val: u64) -> Vec::<u8> {
     bytes
 }
 
+#[inline]
 fn extend_from_bytes_nan(n: u8, val: &NaNBox) -> Vec::<u8> {
     let mut bytes = Vec::with_capacity(INSTRUCTION_PART);
     bytes.push(n);
@@ -326,6 +318,7 @@ fn extend_from_bytes_nan(n: u8, val: &NaNBox) -> Vec::<u8> {
     bytes
 }
 
+#[inline]
 fn extend_to_bytes_string(n: u8, val: &str) -> Vec::<u8> {
     let mut bytes = Vec::with_capacity(128);
     bytes.push(n);
@@ -337,6 +330,7 @@ fn extend_to_bytes_string(n: u8, val: &str) -> Vec::<u8> {
     bytes
 }
 
+#[inline]
 fn nan_from_bytes(bytes: &[u8]) -> NaNBox {
     let mut array = [0; 8];
     array.copy_from_slice(&bytes[1..Inst::SIZE + 1]);
@@ -344,12 +338,14 @@ fn nan_from_bytes(bytes: &[u8]) -> NaNBox {
     NaNBox(f)
 }
 
+#[inline]
 fn u64_from_bytes(bytes: &[u8]) -> u64 {
     let mut array = [0; 8];
     array.copy_from_slice(&bytes[1..Inst::SIZE + 1]);
     u64::from_le_bytes(array)
 }
 
+#[inline]
 fn string_from_bytes(bytes: &[u8], n: usize) -> String {
     String::from_utf8_lossy(&bytes[9..9 + n]).to_string()
 }
@@ -364,7 +360,7 @@ macro_rules! inst_from_bytes {
             };
             Ok((inst, 9))
         } else {
-            Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
+            Err(Trap::InvalidOperand(stringify!($ret)))
         }
     }};
     (n.$b: ident, $ret: tt) => {{
@@ -376,7 +372,7 @@ macro_rules! inst_from_bytes {
             };
             Ok((inst, 9))
         } else {
-            Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
+            Err(Trap::InvalidOperand(stringify!($ret)))
         }
     }};
     (u8.$b: ident, $ret: tt) => {{
@@ -387,7 +383,7 @@ macro_rules! inst_from_bytes {
             };
             Ok((inst, 2))
         } else {
-            Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
+            Err(Trap::InvalidOperand(stringify!($ret)))
         }
     }};
     ($b: ident, $ret: tt) => {{
@@ -401,10 +397,10 @@ macro_rules! inst_from_bytes {
                 };
                 Ok((inst, 9 + str_len))
             } else {
-                Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
+                Err(Trap::InvalidOperand(stringify!($ret)))
             }
         } else {
-            Err(Trap::InvalidOperand(stringify!($ret).to_owned()))
+            Err(Trap::InvalidOperand(stringify!($ret)))
         }
     }}
 }

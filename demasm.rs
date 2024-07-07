@@ -27,7 +27,12 @@ fn main() {
     }
 
     let input = &args[1];
-    let mut mm = Mm::from_binary(input).unwrap_or_report();
+    let buf = std::fs::read(input).map_err(|err| {
+        eprintln!("Failed to read from file: {input}: {err}");
+        err
+    }).unwrap();
+
+    let (mut mm, program) = Mm::from_binary(input, &buf).unwrap_or_report();
 
     let debug = args.contains(&"-d".to_owned());
     let output = find_flag(&args, "-o");
@@ -36,8 +41,8 @@ fn main() {
     }).unwrap());
 
     if let Some(out) = output {
-        mm.generate_masm(&out).unwrap_or_report();
+        mm.generate_masm(&out, &program).unwrap_or_report();
     } else {
-        mm.execute_program(debug, limit).unwrap_or_report();
+        mm.execute_program(debug, limit, &program).unwrap_or_report();
     }
 }

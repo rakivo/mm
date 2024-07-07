@@ -28,7 +28,7 @@ fn main() {
     }
 
     let input = &args[1];
-    let mut mm = Mm::try_from_masm(&input, vec![]).unwrap_or_report();
+    let (mut mm, program) = Mm::try_from_masm(&input, vec![]).unwrap_or_report();
 
     let debug = args.contains(&"-d".to_owned());
     let output = find_flag(&args, "-o");
@@ -37,8 +37,8 @@ fn main() {
     }).unwrap());
 
     if let Some(out) = output {
-        mm.to_binary(&out).unwrap_or_report();
+        mm.to_binary(&out, &program).unwrap_or_report();
     } else {
-        mm.execute_program(debug, limit).unwrap_or_report();
+        mm.execute_program(debug, limit, &program).unwrap_or_report();
     }
 }
