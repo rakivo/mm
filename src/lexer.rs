@@ -20,7 +20,7 @@ pub type CIterator<'a> = Enumerate::<Peekable::<Lines<'a>>>;
 
 const QUOTE: &str = "\"";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EToken {
     Token(Token),
     Expansion(String)
@@ -146,7 +146,7 @@ impl Lexer {
                                 iter.next();
                             }
 
-                            assert!(args_.len() == args.len(), "{ro}:{c}: Args count must be equal to the args count required in the macro, got: {g}, required: {r}, macro's name: {n}", ro = prev_row + 1, c = t.loc.1, g = args_.len(), r = args.len(), n = m.val);
+                            assert!(args_.len() == args.len(), "{f}:{ro}:{c}: Args count must be equal to the args count required in the macro, got: {g}, required: {r}, macro's name: {n}", f = t.f, ro = prev_row + 1, c = t.loc.1, g = args_.len(), r = args.len(), n = m.val);
                             let args_map = args.iter().map(|t| &t.val).zip(&args_).collect::<HashMap::<_, _>>();
                             for t_ in body.iter() {
                                 if let Some(value) = args_map.get(&t_.val) {
@@ -297,7 +297,7 @@ impl Lexer {
             let trimmed = line.trim();
             if trimmed.starts_with(';') || trimmed.is_empty() { continue }
             if !self.check_for_macros(line, row, &mut iter) {
-                self.lex_line(line.to_owned(), row)
+                self.lex_line(trimmed.to_owned(), row)
             }
         }
 

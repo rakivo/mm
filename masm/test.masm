@@ -13,7 +13,7 @@ start_operations:
     dmp 1
     inc         ; Increment the top stack element by 1 (10)
     dmp 1
-    swap        ; Swap the top two stack elements (6, 10)
+    swap 1       ; Swap the top two stack elements (6, 10)
     dmp 1
     pop         ; Remove the top stack element (6)
     dmp 1

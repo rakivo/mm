@@ -71,21 +71,24 @@ impl std::fmt::Display for Mm {
 }
 
 macro_rules! convert {
-    ($s: expr, $inst: expr, $f: tt, $f1: tt) => {
+    ($s: expr, $inst: expr, $f: tt, $f1: tt, $expected: tt) => {
         if let Some(l) = $s.stack.pop_back() {
+            Self::typecheck(l, Type::$expected)?;
             let v = l.$f();
             $s.stack.push_back(NaNBox::$f1(v as _));
             $s.ip += 1;
             Ok(())
         } else {
-            Err(Trap::StackUnderflow($inst.typ))
+            Err(Trap::StackUnderflow($inst.typ.to_owned()))
         }
     };
-    (i.$s: expr, $inst: expr, $f1: tt, $m: expr, $f2: tt, $t1: tt, $t2: tt) => {
+    (i.$s: expr, $inst: expr, $f1: tt, $m: expr, $f2: tt, $expected: tt) => {
         if let Some(l) = $s.stack.pop_back() {
+            Self::typecheck(l, Type::$expected)?;
             let v = l.$f1();
+            let got = l.get_type().expect("Failed to get type");
             if v < $m {
-                return Err(Trap::FailedConversion(l, Type::$t1, Type::$t2))
+                return Err(Trap::FailedConversion(l, got, Type::$expected))
             }
             $s.stack.push_back(NaNBox::$f2(v as _));
             $s.ip += 1;
@@ -123,6 +126,24 @@ impl Mm {
         })
     }
 
+    fn typecheck(val: NaNBox, expected: Type) -> MResult::<()> {
+        let got = val.get_type().expect("Failed to get type");
+
+        match (&got, &expected) {
+            (Type::I64, Type::I64) |
+            (Type::U64, Type::I64) |
+            (Type::I64, Type::U64) |
+            (Type::U64, Type::U64) => Ok(()),
+            // ^ It's ok, trust me. :-)
+
+            _ => if got != expected {
+                Err(Trap::InvalidType(val, got, expected))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
     #[inline(always)]
     pub fn halt(&self) -> &bool {
         &self.halt
@@ -142,6 +163,7 @@ impl Mm {
             _ => unreachable!()
         }
 
+        self.ip += 1;
         Ok(())
     }
 
@@ -169,6 +191,7 @@ impl Mm {
         }
         *prelast = NaNBox(NaNBox::set_type(prelast.0, Type::I64));
 
+        self.ip += 1;
         Ok(())
     }
 
@@ -186,17 +209,7 @@ impl Mm {
             self.stack[stack_len - 1].to_owned()
         };
 
-        let prelast = &mut self.stack[stack_len - 2];
-
-        use InstType::*;
         match inst {
-            SWAP => {
-                let a = *prelast;
-                let b = last;
-                self.stack.pop_back();
-                self.stack.push_back(b);
-                self.stack.push_back(a)
-            }
             _ => match typeflag {
                 1 => self.two_opers_iinst(inst, last)?,
                 2 => self.two_opers_finst(inst, last)?,
@@ -204,7 +217,6 @@ impl Mm {
             },
         }
 
-        self.ip += 1;
         Ok(())
     }
 
@@ -235,52 +247,55 @@ impl Mm {
 
         use InstType::*;
         match inst.typ {
-            NOP => Ok(()),
-
-            PUSH => {
-                let oper = inst.val.as_nan();
-                if self.stack.len() < Mm::STACK_CAP {
-                    self.stack.push_back(*oper);
-                    self.ip += 1;
-                    Ok(())
-                } else {
-                    Err(Trap::StackOverflow(inst.typ))
-                }
+            PUSH => if self.stack.len() < Mm::STACK_CAP {
+                self.stack.push_back(*inst.val.as_nan());
+                self.ip += 1;
+                Ok(())
+            } else {
+                Err(Trap::StackOverflow(inst.typ))
             }
 
-            POP => {
-                if !self.stack.is_empty() {
-                    self.stack.pop_back();
-                    self.ip += 1;
-                    Ok(())
-                } else {
-                    Err(Trap::StackUnderflow(inst.typ))
-                }
+            POP => if !self.stack.is_empty() {
+                self.stack.pop_back();
+                self.ip += 1;
+                Ok(())
+            } else {
+                Err(Trap::StackUnderflow(inst.typ))
             }
 
-            INC => {
-                if let Some(last) = self.stack.back_mut() {
-                    let v = last.get_value();
-                    *last = NaNBox::from_i64(v + 1);
-                    self.ip += 1;
-                    Ok(())
-                } else {
-                    Err(Trap::StackUnderflow(inst.typ))
-                }
+            INC => if let Some(last) = self.stack.back_mut() {
+                let v = last.get_value();
+                *last = NaNBox::from_i64(v + 1);
+                self.ip += 1;
+                Ok(())
+            } else {
+                Err(Trap::StackUnderflow(inst.typ))
             }
 
-            DEC => {
-                if let Some(last) = self.stack.back_mut() {
-                    let v = last.get_value();
-                    *last = NaNBox::from_i64(v - 1);
-                    self.ip += 1;
-                    Ok(())
-                } else {
-                    Err(Trap::StackUnderflow(inst.typ))
-                }
+            DEC => if let Some(last) = self.stack.back_mut() {
+                let v = last.get_value();
+                *last = NaNBox::from_i64(v - 1);
+                self.ip += 1;
+                Ok(())
+            } else {
+                Err(Trap::StackUnderflow(inst.typ))
             }
 
-            SWAP => self.two_opers_inst(SWAP, false, 0),
+            SWAP => if self.stack.len() > *inst.val.as_u64() as usize {
+                let pos = *inst.val.as_u64() as usize;
+                let idx = self.stack.len() - pos - 1;
+
+                let b = self.stack.pop_back().unwrap();
+                let a = self.stack[idx];
+                let am = &mut self.stack[idx];
+
+                *am = b;
+                self.stack.push_back(a);
+                self.ip += 1;
+                Ok(())
+            } else {
+                Err(Trap::StackUnderflow(inst.typ))
+            }
 
             IADD => self.two_opers_inst(IADD, true, 1),
             ISUB => self.two_opers_inst(ISUB, true, 1),
@@ -292,31 +307,25 @@ impl Mm {
             FMUL => self.two_opers_inst(FMUL, true, 2),
             FDIV => self.two_opers_inst(FDIV, true, 2),
 
-            CMP => {
-                let oper = inst.val.as_nan();
-                if let Some(ref last) = self.stack.back() {
-                    self.flags.cmp(&last.as_u64(), &oper.as_u64());
+            CMP => if let Some(ref last) = self.stack.back() {
+                self.flags.cmp(&last.as_u64(), &inst.val.as_nan().as_u64());
+                self.ip += 1;
+                Ok(())
+            } else {
+                Err(Trap::StackUnderflow(inst.typ))
+            }
+
+            DUP => if self.stack.len() > *inst.val.as_u64() as usize {
+                if self.stack.len() < Mm::STACK_CAP {
+                    let val = self.stack[self.stack.len() - 1 - *inst.val.as_u64() as usize];
+                    self.stack.push_back(val);
                     self.ip += 1;
                     Ok(())
                 } else {
-                    Err(Trap::StackUnderflow(inst.typ))
+                    Err(Trap::StackOverflow(inst.typ))
                 }
-            }
-
-            DUP => {
-                let oper = inst.val.as_u64();
-                if self.stack.len() > *oper as usize {
-                    if self.stack.len() < Mm::STACK_CAP {
-                        let val = self.stack[self.stack.len() - 1 - *oper as usize];
-                        self.stack.push_back(val);
-                        self.ip += 1;
-                        Ok(())
-                    } else {
-                        Err(Trap::StackOverflow(inst.typ))
-                    }
-                } else {
-                    Err(Trap::StackUnderflow(inst.typ))
-                }
+            } else {
+                Err(Trap::StackUnderflow(inst.typ))
             }
 
               JE
@@ -338,8 +347,7 @@ impl Mm {
                     self.ip = *ip;
                     Ok(())
                 } else {
-                    eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {len}",
-                              len = self.program.len());
+                    eprintln!("ERROR: operand `{ip}` is outside of program bounds, program len: {len}", len = self.program.len());
                     Err(Trap::InvalidLabel(label.to_owned(), "Out of bounds".to_owned()))
                 }
             }
@@ -378,7 +386,7 @@ impl Mm {
                     if self.call_stack.len() < Self::CALL_STACK_CAP {
                         self.call_stack.push_back(self.ip + 1);
                     } else {
-                        return Err(Trap::CallStackOverflow(inst))
+                        return Err(Trap::CallStackOverflow(inst.to_owned()))
                     }
                 }
 
@@ -404,12 +412,12 @@ impl Mm {
                 }
             }
 
-            F2I => convert!(self, inst, as_f64, from_i64),
-            F2U => convert!(i.self, inst, as_f64, 0.0, from_u64, F64, U64),
-            I2F => convert!(i.self, inst, as_i64, 0, from_f64, I64, F64),
-            I2U => convert!(i.self, inst, as_i64, 0, from_u64, I64, U64),
-            U2I => convert!(self, inst, as_u64, from_i64),
-            U2F => convert!(self, inst, as_u64, from_f64),
+            F2I => convert!(self, inst, as_f64, from_i64, F64),
+            F2U => convert!(i.self, inst, as_f64, 0.0, from_u64, F64),
+            I2F => convert!(i.self, inst, as_i64, 0, from_f64, I64),
+            I2U => convert!(i.self, inst, as_i64, 0, from_u64, I64),
+            U2I => convert!(self, inst, as_u64, from_i64, U64),
+            U2F => convert!(self, inst, as_u64, from_f64, U64),
 
             HALT => {
                 self.halt = true;
@@ -462,8 +470,10 @@ impl Mm {
             f.write_all(&inst.as_bytes())?;
         }
 
-        let elapsed = time.elapsed().as_micros();
-        println!("Compiling to binary took: {elapsed}ms");
+        if DEBUG {
+            let elapsed = time.elapsed().as_micros();
+            println!("Compiling to binary took: {elapsed}ms");
+        }
 
         Ok(())
     }
@@ -476,16 +486,19 @@ impl Mm {
 
         let time = Instant::now();
 
-        let (mut i, mut ip, mut program, mut labels) = (0, 0, Program::new(), Labels::new());
+        let mut i = 0;
+        let mut ip = 0;
+        let mut labels = Labels::with_capacity(10);
+        let mut program = Program::with_capacity(50);
         while i < buf.len() {
             let (inst, size) = Inst::from_bytes(&buf[i..])?;
             match inst.typ {
                 InstType::LABEL => { labels.insert(inst.val.as_string().to_owned(), ip); }
                 _ => {}
             };
-            program.push(((69, 69), inst));
-            i += size;
             ip += 1;
+            i += size;
+            program.push(((69, 69), inst));
         }
 
         if matches!(program.last(), Some(last) if last.1.typ != InstType::HALT) {
@@ -493,8 +506,10 @@ impl Mm {
             program.push(((69, 69), inst));
         }
 
-        let elapsed = time.elapsed().as_micros();
-        println!("Compiling from binary took: {elapsed}ms");
+        if DEBUG {
+            let elapsed = time.elapsed().as_micros();
+            println!("Compiling from binary took: {elapsed}ms");
+        }
 
         let mm = Mm {
             file_path: file_path.to_owned(),
@@ -526,8 +541,10 @@ impl Mm {
             f.write_all(&inst_str.as_bytes())?;
         }
 
-        let elapsed = time.elapsed().as_micros();
-        println!("Generation took: {elapsed} microseconds");
+        if DEBUG {
+            let elapsed = time.elapsed().as_micros();
+            println!("Generation took: {elapsed} microseconds");
+        }
 
         Ok(())
     }
@@ -537,7 +554,7 @@ impl Mm {
     (#12) Implement proper errors and do not just `panic!`, even more embed lexer into the VM, to get even better error messages.
     (#13) Allow use of macros inside of macros.
     (#14) Introduce notes to errors.
-    (#15) Check types more pedantically while performing converting operations.
+    (#16) Change inner buffer of `Flags` to u8.
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
     2. Introduce MasmTranslator struct, that translates masm and report errors proper way.

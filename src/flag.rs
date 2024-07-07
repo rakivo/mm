@@ -22,6 +22,7 @@ impl TryFrom::<&InstType> for Flag {
     }
 }
 
+#[derive(Debug)]
 pub struct Flags([bool; 8]);
 
 impl Flags {

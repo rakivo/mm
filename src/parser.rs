@@ -5,13 +5,13 @@ use std::{
     fs::read_to_string,
     collections::{VecDeque, HashMap},
 };
-use crate::{load_lib, Externs, EToken, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, Mm, NaNBox, PpType, Program, Token, TokenType, Trap};
+use crate::{DEBUG, Externs, EToken, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, Mm, NaNBox, PpType, Program, Token, TokenType, Trap, load_lib};
 
 const ENTRY_POINT: &str = "_start";
 
 pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
 
-fn comptime_labels_check<'a>(program: &Program, labels: &Labels, externs: &Externs, file_path: Cow<'a, str>) -> MMResult::<'a, ()> {
+fn comptime_labels_check<'a>(program: &'a Program, labels: &Labels, externs: &Externs, file_path: Cow<'a, str>) -> MMResult::<'a, ()> {
     use InstType::*;
     for ((row, col), inst) in program.iter() {
         match inst.typ {
@@ -64,6 +64,10 @@ impl Mm {
 
         let lexer = Lexer::new(file_path.to_owned(), content);
         let (ts, mm) = lexer.lex_file();
+        if ts.is_empty() { exit(0) }
+
+        // TODO: remove this scheisse
+        let mut prev = Token::new("urmom".to_owned(), (69, 420), TokenType::Literal, "1024".to_owned());
 
         let mut iter = ts.into_iter();
         let mut program = Vec::new();
@@ -78,8 +82,8 @@ impl Mm {
                     program.push((t.loc, inst))
                 }
                 TokenType::Literal => {
-                    let Ok(typ) = InstType::try_from(&t.val.to_string()) else {
-                        let trap = Trap::UndefinedSymbol(t.val.to_string());
+                    let Ok(typ) = InstType::try_from_string(&t.val.to_string()) else {
+                        let trap = Trap::UndefinedSymbol(prev.val);
                         return Err(MTrap(t.f.into(), t.loc, trap))
                     };
 
@@ -91,35 +95,35 @@ impl Mm {
                             InstType::PUSH | InstType::CMP => {
                                 if arg.contains('.') {
                                     let Ok(v) = arg.parse::<f64>() else {
-                                        let trap = Trap::InvalidType(arg.to_string(), "u64 or f64".to_owned());
+                                        let trap = Trap::InvalidPpType(arg.to_owned(), "u64 or f64".to_owned());
                                         return Err(MTrap(file_path.into(), t.loc, trap))
                                     };
                                     InstValue::NaN(NaNBox(v))
                                 } else {
                                     let Ok(v) = arg.parse::<i64>() else {
-                                        let trap = Trap::InvalidType(arg.to_string(), "u64, i64 or f64".to_owned());
+                                        let trap = Trap::InvalidPpType(arg.to_owned(), "u64, i64 or f64".to_owned());
                                         return Err(MTrap(file_path.into(), t.loc, trap))
                                     };
                                     InstValue::NaN(NaNBox::from_i64(v))
                                 }
                             }
-                            InstType::DUP => {
+                            InstType::DUP | InstType::SWAP => {
                                 let Ok(v) = arg.parse::<u64>() else {
-                                    let trap = Trap::InvalidType(arg.to_string(), "u64 or f64".to_owned());
+                                    let trap = Trap::InvalidPpType(arg.to_string(), "u64 or f64".to_owned());
                                     return Err(MTrap(file_path.into(), t.loc, trap))
                                 };
                                 InstValue::U64(v)
                             }
                             InstType::DMP => {
                                 let Ok(v) = arg.parse::<u8>() else {
-                                    let trap = Trap::InvalidType(arg.to_string(), "u8".to_owned());
+                                    let trap = Trap::InvalidPpType(arg.to_string(), "u8".to_owned());
                                     return Err(MTrap(file_path.into(), t.loc, trap))
                                 };
                                 InstValue::U8(v)
                             }
                             InstType::EXTERN => {
                                 let Ok(v) = iter.next().expect("Expected argument after extern").as_string().parse::<u64>() else {
-                                    let trap = Trap::InvalidType(arg.to_string(), "u64".to_owned());
+                                    let trap = Trap::InvalidPpType(arg.to_string(), "u64".to_owned());
                                     return Err(MTrap(file_path.into(), t.loc, trap))
                                 };
                                 InstValue::StringU64(arg.to_owned(), v)
@@ -134,6 +138,7 @@ impl Mm {
                     } else {
                         Inst::try_from(typ).unwrap()
                     };
+                    prev = t.to_owned();
                     program.push((t.loc, inst));
                 }
                 _ => {
@@ -158,8 +163,10 @@ impl Mm {
 
         comptime_labels_check(&program, &labels, &externs, file_path.into()).unwrap_or_report();
 
-        let elapsed = time.elapsed().as_micros();
-        println!("Parsing and comptime checks took: {elapsed}ms");
+        if DEBUG {
+            let elapsed = time.elapsed().as_micros();
+            println!("Parsing and comptime checks took: {elapsed}ms");
+        }
 
         let mm = Mm {
             file_path: file_path.to_owned(),

@@ -7,7 +7,7 @@
     dmp out
 }
 
-_start1:
+_start:
     write 666 246 isub 1
 
     jmp faddin

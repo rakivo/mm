@@ -1,16 +1,12 @@
-## Mirthual machine, virtual machine that makes you happy.
+; This example is a modificated version of code from here: <https://github.com/tsoding/bm/blob/master/basm/test/cases/pi.basm>
+;
+; π = (4/1) - (4/3) + (4/5) - (4/7) + (4/9) - (4/11) + (4/13) - (4/15) ...
+; Take 4 and subtract 4 divided by 3. Then add 4 divided by 5.
+; Then subtract 4 divided by 7. Continue alternating between adding
+; and subtracting fractions with a numerator of 4 and a denominator of each
+; subsequent odd number. The more times you do this, the closer you will get to pi.
 
-# ATTENTION! **PROJECT IS UNFINISHED**
-
-## Calculate the PI number in masm:
-```console
-$ make -j4 && ./build/masm ./masm/pi.masm
-```
-
-# For example you can take a look at how you can calculate the PI number in masm:
-> Example from masm/pi.masm
-```asm
-#N 7500
+#N 75000
 #SYS_STDOUT 1
 
 ; calculate with current denominator
@@ -58,4 +54,3 @@ loop:
     pop
 
     dmp SYS_STDOUT ; print the value
-```

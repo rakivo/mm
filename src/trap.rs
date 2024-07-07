@@ -12,8 +12,9 @@ pub enum Trap {
     DivisionByZero(InstType),
     IllegalInstructionAccess,
     NoEntryPointFound(String),
-    InvalidType(String, String),
     InvalidLabel(String, String),
+    InvalidPpType(String, String),
+    InvalidType(NaNBox, Type, Type),
     InvalidFunction(String, String),
     FailedConversion(NaNBox, Type, Type),
     OperationWithDifferentTypes(Result::<Type, ()>, Result::<Type, ()>)
@@ -34,8 +35,9 @@ impl std::fmt::Debug for Trap {
             InvalidFunction(func, reason)         => write!(f, "Invalid function: `{func}`: {reason}"),
             NoEntryPointFound(file_path)          => write!(f, "No entry point found in: {file_path}"),
             IllegalInstructionAccess              => write!(f, "Illegal instruction access"),
-            InvalidType(of, expected)             => write!(f, "Invalid type: {of}, expected: {expected}"),
+            InvalidPpType(of, expected)           => write!(f, "Undefined symbol: {of:?}, expected type: {expected}"),
             FailedConversion(val, t1, t2)         => write!(f, "Failed to convert: {val} from: {t1:?} to: {t2:?}"),
+            InvalidType(val, of, expected)        => write!(f, "Expected type: {expected:?}, but got: {of:?}, value: {val}"),
             OperationWithDifferentTypes(ty1, ty2) => write!(f, "Can't perform an operation with two different types, type 1: {ty1:?}, type 2: {ty2:?}")
         }
     }
@@ -52,7 +54,7 @@ impl std::fmt::Debug for MTrap<'_> {
     }
 }
 
-impl<'a> From::<(Cow<'a, str>, Loc, Trap)> for MTrap<'a> {
+impl<'a> From<(Cow<'a, str>, Loc, Trap)> for MTrap<'a> {
     fn from(t: (Cow<'a, str>, Loc, Trap)) -> Self {
         let (file_path, loc, trap) = (t.0, t.1, t.2);
         MTrap(file_path, loc, trap)

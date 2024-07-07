@@ -6,6 +6,7 @@ generated.masm
 *.bin
 *.asm
 *.c
+*.py
 cpp_version
 lib
 extern.masm

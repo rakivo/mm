@@ -49,7 +49,51 @@ pub enum InstType {
 }
 
 impl InstType {
-    #[inline]
+    pub fn try_from_string<'a>(s: &'a String) -> Result::<Self, Trap> {
+        use InstType::*;
+        match s.trim() {
+            "nop"    => Ok(NOP),
+            "push"   => Ok(PUSH),
+            "pop"    => Ok(POP),
+            "inc"    => Ok(INC),
+            "dec"    => Ok(DEC),
+            "iadd"   => Ok(IADD),
+            "isub"   => Ok(ISUB),
+            "imul"   => Ok(IMUL),
+            "idiv"   => Ok(IDIV),
+            "fadd"   => Ok(FADD),
+            "fsub"   => Ok(FSUB),
+            "fmul"   => Ok(FMUL),
+            "fdiv"   => Ok(FDIV),
+            "cmp"    => Ok(CMP),
+            "swap"   => Ok(SWAP),
+            "dup"    => Ok(DUP),
+            "je"     => Ok(JE),
+            "jl"     => Ok(JL),
+            "jnge"   => Ok(JNGE),
+            "jg"     => Ok(JG),
+            "jnle"   => Ok(JNLE),
+            "jne"    => Ok(JNE),
+            "jz"     => Ok(JZ),
+            "jnz"    => Ok(JNZ),
+            "jmp"    => Ok(JMP),
+            "label"  => Ok(LABEL),
+            "bot"    => Ok(BOT),
+            "dmp"    => Ok(DMP),
+            "call"   => Ok(CALL),
+            "ret"    => Ok(RET),
+            "extern" => Ok(EXTERN),
+            "f2i"    => Ok(F2I),
+            "f2u"    => Ok(F2U),
+            "i2f"    => Ok(I2F),
+            "i2u"    => Ok(I2U),
+            "u2i"    => Ok(U2I),
+            "u2f"    => Ok(U2F),
+            "halt"   => Ok(HALT),
+            _        => Err(Trap::UndefinedSymbol(s.to_owned()))
+        }
+    }
+
     pub fn is_arg_required(&self) -> bool {
         match self {
               InstType::PUSH
@@ -60,6 +104,7 @@ impl InstType {
             | InstType::JNGE
             | InstType::JG
             | InstType::JNLE
+            | InstType::SWAP
             | InstType::JNE
             | InstType::JZ
             | InstType::JNZ
@@ -118,57 +163,8 @@ impl std::fmt::Display for InstType {
     }
 }
 
-impl TryFrom::<&String> for InstType {
-    type Error = Trap;
-
-    fn try_from(s: &String) -> Result::<Self, Self::Error> {
-        use InstType::*;
-        match s.trim() {
-            "nop"    => Ok(NOP),
-            "push"   => Ok(PUSH),
-            "pop"    => Ok(POP),
-            "inc"    => Ok(INC),
-            "dec"    => Ok(DEC),
-            "iadd"   => Ok(IADD),
-            "isub"   => Ok(ISUB),
-            "imul"   => Ok(IMUL),
-            "idiv"   => Ok(IDIV),
-            "fadd"   => Ok(FADD),
-            "fsub"   => Ok(FSUB),
-            "fmul"   => Ok(FMUL),
-            "fdiv"   => Ok(FDIV),
-            "cmp"    => Ok(CMP),
-            "swap"   => Ok(SWAP),
-            "dup"    => Ok(DUP),
-            "je"     => Ok(JE),
-            "jl"     => Ok(JL),
-            "jnge"   => Ok(JNGE),
-            "jg"     => Ok(JG),
-            "jnle"   => Ok(JNLE),
-            "jne"    => Ok(JNE),
-            "jz"     => Ok(JZ),
-            "jnz"    => Ok(JNZ),
-            "jmp"    => Ok(JMP),
-            "label"  => Ok(LABEL),
-            "bot"    => Ok(BOT),
-            "dmp"    => Ok(DMP),
-            "call"   => Ok(CALL),
-            "ret"    => Ok(RET),
-            "extern" => Ok(EXTERN),
-            "f2i"    => Ok(F2I),
-            "f2u"    => Ok(F2U),
-            "i2f"    => Ok(I2F),
-            "i2u"    => Ok(I2U),
-            "u2i"    => Ok(U2I),
-            "u2f"    => Ok(U2F),
-            "halt"   => Ok(HALT),
-            _        => Err(Trap::UndefinedSymbol(s.to_string()))
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
-pub enum InstValue {
+pub enum InstValue<'a> {
     U8(u8),
     NaN(NaNBox),
     F64(f64),
@@ -264,7 +260,6 @@ impl TryFrom::<InstType> for Inst {
             InstType::FSUB => Ok(Self::FSUB),
             InstType::FMUL => Ok(Self::FMUL),
             InstType::FDIV => Ok(Self::FDIV),
-            InstType::SWAP => Ok(Self::SWAP),
             InstType::BOT  => Ok(Self::BOT),
             InstType::RET  => Ok(Self::RET),
 
@@ -300,7 +295,6 @@ impl Inst {
     _decl_const_!{FSUB}
     _decl_const_!{FMUL}
     _decl_const_!{FDIV}
-    _decl_const_!{SWAP}
     _decl_const_!{BOT}
     _decl_const_!{F2I}
     _decl_const_!{F2U}
@@ -389,7 +383,7 @@ macro_rules! inst_from_bytes {
         if $b.len() >= 2 {
             let inst = Inst {
                 typ: InstType::$ret,
-                val: InstValue::U8($b[0])
+                val: InstValue::U8($b[1])
             };
             Ok((inst, 2))
         } else {
@@ -428,7 +422,7 @@ impl Inst {
             InstType::IMUL   => vec![7],
             InstType::IDIV   => vec![8],
             InstType::CMP    => extend_from_bytes_nan(9, &self.val.as_nan()),
-            InstType::SWAP   => vec![10],
+            InstType::SWAP   => extend_from_bytes_u64(10, *self.val.as_u64()),
             InstType::DUP    => extend_from_bytes_u64(11, *self.val.as_u64()),
             InstType::JE     => extend_to_bytes_string(12, self.val.as_string()),
             InstType::JL     => extend_to_bytes_string(13, self.val.as_string()),
@@ -459,7 +453,7 @@ impl Inst {
         }
     }
 
-    pub fn from_bytes(bytes: &[u8]) -> Result<(Inst, usize), Trap> {
+    pub fn from_bytes(bytes: &[u8]) -> Result::<(Inst, usize), Trap> {
         match bytes.first() {
             Some(0)  => Ok((Inst::NOP, 1)),
             Some(1)  => inst_from_bytes!(i.bytes, PUSH),
@@ -471,7 +465,7 @@ impl Inst {
             Some(7)  => Ok((Inst::IMUL, 1)),
             Some(8)  => Ok((Inst::IDIV, 1)),
             Some(9)  => inst_from_bytes!(i.bytes, CMP),
-            Some(10) => Ok((Inst::SWAP, 1)),
+            Some(10) => inst_from_bytes!(n.bytes, SWAP),
             Some(11) => inst_from_bytes!(n.bytes, DUP),
             Some(12) => inst_from_bytes!(bytes, JE),
             Some(13) => inst_from_bytes!(bytes, JL),
@@ -543,7 +537,7 @@ impl std::fmt::Display for Inst {
             InstType::FMUL   => write!(f, "`FMUL`"),
             InstType::FDIV   => write!(f, "`FDIV`"),
             InstType::CMP    => { write!(f, "`CMP`, operand: `{oper}`") }
-            InstType::SWAP   => write!(f, "`SWAP`"),
+            InstType::SWAP   => write!(f, "`SWAP`, operand: `{oper}`", oper =  self.val.as_u64()),
             InstType::DUP    => { write!(f, "`DUP`, operand: `{oper}`", oper =  self.val.as_u64()) }
             InstType::JE     => write!(f, "`JE`, operand: `{oper}`", oper = self.val.as_string()),
             InstType::JL     => write!(f, "`JL`, operand: `{oper}`", oper = self.val.as_string()),
