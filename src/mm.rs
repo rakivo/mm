@@ -104,7 +104,7 @@ impl Mm {
     const CALL_STACK_CAP: usize = 8 * 128;
 
     fn process_labels(program: &Program, f: &str) -> Labels {
-        program.iter().fold((Labels::new(), 0), |(mut labels, ip), (loc, inst)| {
+        program.iter().fold((Labels::with_capacity(10), 0), |(mut labels, ip), (loc, inst)| {
             match inst.typ {
                 InstType::LABEL => if labels.contains_key(inst.val.as_string()) {
                     panic!("{f}:{r}:{c}: <-- Here, conflicting definitions of: {n:?}", n = inst.val.as_string(), r = loc.0 + 1, c = loc.1)
@@ -118,7 +118,7 @@ impl Mm {
     }
 
     fn process_externs(program: &Program, libs: &Vec::<*mut void>) -> Externs {
-        program.iter().filter(|x| x.1.typ == InstType::EXTERN).fold(Externs::new(), |mut exs, (_, inst)| {
+        program.iter().filter(|x| x.1.typ == InstType::EXTERN).fold(Externs::with_capacity(15), |mut exs, (_, inst)| {
             let (sym, args_count) = inst.val.as_string_u64();
             let ex = libs.iter().cloned().find_map(|l| load_sym(l, &sym).ok()).expect(&format!("No such symbol: {sym}"));
             exs.insert(sym.to_owned(), (ex, args_count as usize));
@@ -519,7 +519,7 @@ impl Mm {
             } else {
                 VecDeque::with_capacity(Mm::CALL_STACK_CAP)
             },
-            externs: Externs::new(),
+            externs: Externs::with_capacity(15),
             labels,
             flags: Flags::new(),
             program,

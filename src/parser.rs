@@ -69,8 +69,8 @@ impl Mm {
         // TODO: remove this scheisse
         let mut prev = Token::new("urmom".to_owned(), (69, 420), TokenType::Literal, "1024".to_owned());
 
+        let mut program = Vec::with_capacity(ts.len() / 2);
         let mut iter = ts.into_iter();
-        let mut program = Vec::new();
         while let Some(et) = iter.next() {
             let EToken::Token(t) = et else { continue };
             match t.typ {

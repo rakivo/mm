@@ -103,8 +103,8 @@ impl Lexer {
 
     pub fn new(file_path: String, content: String) -> Self {
         Self {
-            ts: Tokens::new(),
-            mm: MacrosMap::new(),
+            ts: Tokens::with_capacity(100),
+            mm: MacrosMap::with_capacity(15),
             file_path,
             content
         }
@@ -139,7 +139,7 @@ impl Lexer {
                         SingleLine { value } => ets.push(EToken::Expansion(value.to_owned())),
                         MultiLine { body, args } => {
                             let prev_row = t.loc.0;
-                            let mut args_ = Vec::new();
+                            let mut args_ = Vec::with_capacity(10);
                             while let Some(t) = iter.peek().cloned() {
                                 if prev_row != t.loc.0 { break }
                                 args_.push(t);
@@ -177,7 +177,7 @@ impl Lexer {
     }
 
     fn split_whitespace_preserve_indices(input: &str) -> lexer::Iterator {
-        let (s, e, mut ret) = input.char_indices().fold((0, 0, Vec::new()),
+        let (s, e, mut ret) = input.char_indices().fold((0, 0, Vec::with_capacity(input.len())),
             |(s, e, mut ret), (i, c)|
         {
             if c.is_whitespace() {
@@ -223,7 +223,7 @@ impl Lexer {
                         Token::new(self.file_path.to_owned(), loc, TokenType::Literal, arg.into())
                     }).collect::<Vec::<_>>();
 
-                let mut body = Vec::new();
+                let mut body = Vec::with_capacity(150);
                 while let Some((row, line)) = iter.next() {
                     let trimmed = line.trim();
                     if trimmed.starts_with(';') { continue }

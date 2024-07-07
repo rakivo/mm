@@ -164,7 +164,7 @@ impl std::fmt::Display for InstType {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum InstValue<'a> {
+pub enum InstValue {
     U8(u8),
     NaN(NaNBox),
     F64(f64),
