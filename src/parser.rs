@@ -5,7 +5,7 @@ use std::{
     fs::read_to_string,
     collections::VecDeque,
 };
-use crate::{load_lib, MEMORY_CAP, EToken, Externs, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, MacrosMap, Mm, NaNBox, Natives, PpType, Program, Token, TokenType, Trap, DEBUG};
+use crate::{MEMORY_CAP, EToken, Externs, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, MacrosMap, Mm, NaNBox, Natives, PpType, Program, Token, TokenType, Trap, DEBUG};
 
 const ENTRY_POINT: &str = "_start";
 
@@ -51,7 +51,7 @@ pub fn get_truth<'a>(s: String, map: &MacrosMap) -> String {
 }
 
 impl<'a> Mm<'a> {
-    pub fn try_from_masm(file_path: &'a str, lib_paths: Vec::<&'a str>, natives: Natives) -> Result::<(Mm<'a>, Program), MTrap<'a>>
+    pub fn try_from_masm(file_path: &'a str, _: Vec::<&'a str>, natives: Natives) -> Result::<(Mm<'a>, Program), MTrap<'a>>
     where
         Self: Sized
     {
@@ -175,8 +175,9 @@ impl<'a> Mm<'a> {
             return Err(MTrap(file_path.into(), (0, 0), trap))
         };
 
-        let libs = lib_paths.iter().map(|l| load_lib(l).unwrap()).collect::<Vec::<_>>();
-        let externs = Mm::process_externs(&program, &libs);
+        // let libs = lib_paths.iter().map(|l| load_lib(l).unwrap()).collect::<Vec::<_>>();
+        // let externs = Mm::process_externs(&program, &libs);
+        let externs = Externs::new();
         Mm::check_natives(&program, &natives).unwrap();
 
         comptime_labels_check(&program, &labels, &externs, &natives, file_path.into()).unwrap_or_report();

@@ -10,7 +10,6 @@ pub mod inst;
 pub mod trap;
 pub mod lexer;
 pub mod parser;
-pub mod libloading;
 
 pub use nan::*;
 pub use flag::*;
@@ -18,13 +17,12 @@ pub use inst::*;
 pub use trap::*;
 pub use lexer::*;
 pub use parser::*;
-pub use libloading::*;
 
 #[cfg(feature = "dbg")]
 const DEBUG: bool = true;
 
 #[cfg(not(feature = "dbg"))]
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 pub type MResult<'a, T> = std::result::Result<T, Trap<'a>>;
 
@@ -171,14 +169,14 @@ impl<'a> Mm<'a> {
         }).0
     }
 
-    fn process_externs(program: &Program, libs: &Vec::<*mut void>) -> Externs {
-        program.iter().filter(|x| x.1.typ == InstType::EXTERN).fold(Externs::with_capacity(15), |mut exs, (_, inst)| {
-            let (sym, args_count) = inst.val.as_string_u64();
-            let ex = libs.iter().cloned().find_map(|l| load_sym(l, &sym).ok()).expect(&format!("No such symbol: {sym}"));
-            exs.insert(sym.to_owned(), (ex, args_count as usize));
-            exs
-        })
-    }
+    // fn process_externs(program: &Program, libs: &Vec::<*mut void>) -> Externs {
+    //     program.iter().filter(|x| x.1.typ == InstType::EXTERN).fold(Externs::with_capacity(15), |mut exs, (_, inst)| {
+    //         let (sym, args_count) = inst.val.as_string_u64();
+    //         let ex = libs.iter().cloned().find_map(|l| load_sym(l, &sym).ok()).expect(&format!("No such symbol: {sym}"));
+    //         exs.insert(sym.to_owned(), (ex, args_count as usize));
+    //         exs
+    //     })
+    // }
 
     fn check_natives(program: &'a Program, natives: &'a Natives) -> MResult::<'a, ()> {
         if let Some(unative) = program.iter().filter(|x| x.1.typ == InstType::NATIVE).find(|(_, inst)| {
@@ -558,7 +556,7 @@ impl<'a> Mm<'a> {
         Ok(())
     }
 
-    pub fn from_binary(file_path: &'a str, buf: &'a Vec::<u8>, natives: Natives, lib_paths: Vec::<&'a str>) -> MResult::<'a, (Mm<'a>, Program)> {
+    pub fn from_binary(file_path: &'a str, buf: &'a Vec::<u8>, natives: Natives, _: Vec::<&'a str>) -> MResult::<'a, (Mm<'a>, Program)> {
         let time = Instant::now();
 
         let mut i = 0;
@@ -586,8 +584,9 @@ impl<'a> Mm<'a> {
             println!("Compiling from binary took: {elapsed}ms");
         }
 
-        let libs = lib_paths.iter().map(|l| load_lib(l).unwrap()).collect::<Vec::<_>>();
-        let externs = Mm::process_externs(&program, &libs);
+        // let libs = lib_paths.iter().map(|l| load_lib(l).unwrap()).collect::<Vec::<_>>();
+        // let externs = Mm::process_externs(&program, &libs);
+        let externs = Externs::new();
         Mm::check_natives(&program, &natives).unwrap();
 
         let mm = Mm {
