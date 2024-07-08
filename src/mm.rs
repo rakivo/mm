@@ -23,7 +23,13 @@ pub type MResult<'a, T> = std::result::Result<T, Trap<'a>>;
 pub type Program = Vec::<(Loc, Inst)>;
 
 pub type Labels = HashMap::<String, usize>;
-pub type Externs = HashMap::<String, (*const (), usize)>;
+
+pub type NativeFn = fn(&mut Mm);
+pub type Natives = HashMap::<&'static str, for<'a, 'b> fn(&'a mut Mm<'b>)>;
+
+pub type Lib = (*const (), usize);
+pub type Libs = Vec::<Lib>;
+pub type Externs = HashMap::<String, Lib>;
 
 pub struct Mm<'a> {
     pub file_path: &'a str,
@@ -31,6 +37,7 @@ pub struct Mm<'a> {
     stack: VecDeque::<NaNBox>,
     call_stack: VecDeque::<usize>,
 
+    natives: Natives,
     externs: Externs,
 
     labels: Labels,
@@ -98,6 +105,15 @@ macro_rules! convert {
     };
 }
 
+#[macro_export]
+macro_rules! natives {
+    ($($n: tt), *) => {{
+        let mut natives = std::collections::HashMap::<&'static str, for<'a, 'b> fn(&'a mut mm::Mm<'b>)>::new();
+        $(natives.insert(stringify!($n), $n);)*
+        natives
+    }};
+}
+
 impl<'a> Mm<'a> {
     const CALL_STACK_CAP: usize = 8 * 128;
 
@@ -124,6 +140,16 @@ impl<'a> Mm<'a> {
         })
     }
 
+    fn check_natives(program: &'a Program, natives: &'a Natives) -> MResult::<'a, ()> {
+        if let Some(unative) = program.iter().filter(|x| x.1.typ == InstType::NATIVE).find(|(_, inst)| {
+            !natives.contains_key(inst.val.as_string().as_str())
+        }) {
+            Err(Trap::UndeclaredNative(unative.1.val.as_string()))
+        } else {
+            Ok(())
+        }
+    }
+
     // TODO: do it at comptime
     #[inline]
     fn typecheck(val: NaNBox, expected: Type) -> MResult::<'a, ()> {
@@ -147,6 +173,16 @@ impl<'a> Mm<'a> {
     #[inline(always)]
     pub fn halt(&self) -> &bool {
         &self.halt
+    }
+
+    #[inline(always)]
+    pub fn stack(&self) -> &VecDeque::<NaNBox> {
+        &self.stack
+    }
+
+    #[inline(always)]
+    pub fn stack_mut(&mut self) -> &mut VecDeque::<NaNBox> {
+        &mut self.stack
     }
 
     #[inline]
@@ -308,14 +344,14 @@ impl<'a> Mm<'a> {
                 Ok(())
             }
 
-            JE
-                | JL
-                | JG
-                | JLE
-                | JNE
-                | JGE
-                | JZ
-                | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
+              JE
+            | JL
+            | JG
+            | JLE
+            | JNE
+            | JGE
+            | JZ
+            | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
 
             JMP => {
                 let label = inst.val.as_string();
@@ -367,13 +403,17 @@ impl<'a> Mm<'a> {
                 if let Some(ip) = self.labels.get(addr) {
                     self.ip = *ip;
                     Ok(())
-                } else if let Some((..)) = self.externs.get(addr) {
+                } else if let Some((..)) = self.externs.get(addr.as_str()) {
                     todo!("Calling external functions feature is unimplemented");
                     // if self.stack.len() < *args_count { return Err(Trap::StackUnderflow(inst.typ)) }
                     // self.ip += 1;
                     // Ok(())
+                } else if let Some(native) = self.natives.get(addr.as_str()) {
+                    native(self);
+                    self.ip += 1;
+                    Ok(())
                 } else {
-                    Err(Trap::InvalidFunction(addr, "Not found in function map"))
+                    Err(Trap::InvalidFunction(addr, "Not found in labels | natives | externs map"))
                 }
             }
 
@@ -409,13 +449,11 @@ impl<'a> Mm<'a> {
         let time = Instant::now();
 
         let file_path: Cow::<str> = self.file_path.to_owned().into();
-
-        let mut count = 0;
-        let limit = limit.unwrap_or(usize::MAX);
+        let mut limit = limit.unwrap_or(usize::MAX);
 
         // let mut instruction_times = HashMap::<&InstType, u128>::new();
 
-        while !self.halt() && count < limit {
+        while !self.halt() && limit > 0 {
             let loc = program[self.ip].0;
 
             // let inst_type = &program[self.ip].1.typ;
@@ -436,11 +474,11 @@ impl<'a> Mm<'a> {
             // })
             // .or_insert(elapsed_time);
 
-            count += 1;
+            limit -= 1;
         }
 
         let elapsed = time.elapsed().as_micros();
-        println!("Execution of the program took: {elapsed}ms and {count} iterations were performed");
+        println!("Execution of the program took: {elapsed}ms");
 
         // for (inst_type, max_time) in &instruction_times {
         //     println!("Max time for instruction type {inst_type}: {max_time}μs");
@@ -467,7 +505,7 @@ impl<'a> Mm<'a> {
         Ok(())
     }
 
-    pub fn from_binary(file_path: &'a str, buf: &'a Vec::<u8>) -> MResult::<'a, (Mm<'a>, Program)> {
+    pub fn from_binary(file_path: &'a str, buf: &'a Vec::<u8>, natives: Natives, lib_paths: Vec::<&'a str>) -> MResult::<'a, (Mm<'a>, Program)> {
         let time = Instant::now();
 
         let mut i = 0;
@@ -495,6 +533,10 @@ impl<'a> Mm<'a> {
             println!("Compiling from binary took: {elapsed}ms");
         }
 
+        let libs = lib_paths.iter().map(|l| load_lib(l).unwrap()).collect::<Vec::<_>>();
+        let externs = Mm::process_externs(&program, &libs);
+        Mm::check_natives(&program, &natives).unwrap();
+
         let mm = Mm {
             file_path,
             stack: VecDeque::with_capacity(1024),
@@ -503,7 +545,8 @@ impl<'a> Mm<'a> {
             } else {
                 VecDeque::with_capacity(Mm::CALL_STACK_CAP)
             },
-            externs: Externs::with_capacity(15),
+            natives,
+            externs,
             labels,
             flags: Flags::new(),
             ip: 0,

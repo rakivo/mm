@@ -45,6 +45,7 @@ pub enum InstType {
     CALL,
     RET,
     EXTERN,
+    NATIVE,
     HALT,
 }
 
@@ -84,6 +85,7 @@ impl InstType {
             "call"   => Ok(InstType::CALL),
             "ret"    => Ok(InstType::RET),
             "extern" => Ok(InstType::EXTERN),
+            "native" => Ok(InstType::NATIVE),
             "f2i"    => Ok(InstType::F2I),
             "f2u"    => Ok(InstType::F2U),
             "i2f"    => Ok(InstType::I2F),
@@ -113,6 +115,7 @@ impl InstType {
             | InstType::LABEL
             | InstType::DMP
             | InstType::CALL
+            | InstType::NATIVE
             | InstType::EXTERN => true,
             _ => false
         }
@@ -159,6 +162,7 @@ impl std::fmt::Display for InstType {
             InstType::CALL   => write!(f, "call"),
             InstType::RET    => write!(f, "ret"),
             InstType::EXTERN => write!(f, "extern"),
+            InstType::NATIVE => write!(f, "native"),
             InstType::HALT   => write!(f, "halt"),
         }
     }
@@ -447,6 +451,7 @@ impl Inst {
             InstType::I2U    => vec![34],
             InstType::U2I    => vec![35],
             InstType::U2F    => vec![36],
+            InstType::NATIVE => vec![37],
             InstType::HALT   => vec![69],
         }
     }
@@ -483,6 +488,14 @@ impl Inst {
             Some(27) => inst_from_bytes!(u8.bytes, DMP),
             Some(28) => inst_from_bytes!(bytes, CALL),
             Some(29) => Ok((Inst::RET, 1)),
+            Some(30) => inst_from_bytes!(bytes, EXTERN),
+            Some(31) => Ok((Inst::F2I, 1)),
+            Some(32) => Ok((Inst::F2U, 1)),
+            Some(33) => Ok((Inst::I2F, 1)),
+            Some(34) => Ok((Inst::I2U, 1)),
+            Some(35) => Ok((Inst::U2I, 1)),
+            Some(36) => Ok((Inst::U2F, 1)),
+            Some(37) => inst_from_bytes!(bytes, NATIVE),
             Some(69) => Ok((Inst::HALT, 1)),
             _        => Err(Trap::UndefinedSymbol(format!("bytes: {bytes:?}"))),
         }
@@ -557,7 +570,8 @@ impl std::fmt::Display for Inst {
             InstType::BOT    => write!(f, "`BOT`"),
             InstType::RET    => write!(f, "`RET`"),
             InstType::DMP    => write!(f, "`DMP`, operand: {oper}", oper = self.val.as_u8()),
-            InstType::EXTERN => write!(f, "`DMP`, operand: {oper}", oper = self.val.as_string()),
+            InstType::EXTERN => write!(f, "`EXTERN`, operand: {oper}", oper = self.val.as_string()),
+            InstType::NATIVE => write!(f, "`NATIVE`, operand: {oper}", oper = self.val.as_string()),
             InstType::HALT   => write!(f, "`HALT`"),
         }
     }

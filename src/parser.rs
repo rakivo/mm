@@ -5,13 +5,13 @@ use std::{
     fs::read_to_string,
     collections::VecDeque,
 };
-use crate::{DEBUG, MacrosMap, Externs, EToken, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, Mm, NaNBox, PpType, Program, Token, TokenType, Trap, load_lib};
+use crate::{load_lib, EToken, Externs, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, MacrosMap, Mm, NaNBox, Natives, PpType, Program, Token, TokenType, Trap, DEBUG};
 
 const ENTRY_POINT: &str = "_start";
 
 pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
 
-fn comptime_labels_check<'a>(program: &'a Program, labels: &Labels, externs: &Externs, file_path: Cow<'a, str>) -> MMResult::<'a, ()> {
+fn comptime_labels_check<'a>(program: &'a Program, labels: &Labels, externs: &Externs, natives: &Natives, file_path: Cow<'a, str>) -> MMResult::<'a, ()> {
     use InstType::*;
     for ((row, col), inst) in program.iter() {
         match inst.typ {
@@ -26,8 +26,8 @@ fn comptime_labels_check<'a>(program: &'a Program, labels: &Labels, externs: &Ex
             | JMP
             | CALL => {
                 let label = inst.val.as_string();
-                if !labels.contains_key(label.as_str()) && !externs.contains_key(label) {
-                    let trap = Trap::InvalidLabel(label, "Not found in label map");
+                if !labels.contains_key(label.as_str()) && !externs.contains_key(label.as_str()) && !natives.contains_key(label.as_str()) {
+                    let trap = Trap::InvalidLabel(label, "CE: Not found in labels | natives | externs map");
                     return Err(MTrap(file_path, (*row, *col), trap))
                 }
             }
@@ -51,7 +51,7 @@ fn get_truth<'a>(s: String, map: &MacrosMap) -> String {
 }
 
 impl<'a> Mm<'a> {
-    pub fn try_from_masm(file_path: &'a str, lib_paths: Vec::<&'a str>) -> Result::<(Mm<'a>, Program), MTrap<'a>>
+    pub fn try_from_masm(file_path: &'a str, lib_paths: Vec::<&'a str>, natives: Natives) -> Result::<(Mm<'a>, Program), MTrap<'a>>
     where
         Self: Sized
     {
@@ -125,8 +125,11 @@ impl<'a> Mm<'a> {
                                 };
                                 InstValue::U8(v)
                             }
+                            InstType::NATIVE => {
+                                InstValue::String(arg)
+                            }
                             InstType::EXTERN => {
-                                let Ok(v) = iter.next().expect("Expected argument after extern").as_string().parse::<u64>() else {
+                                let Ok(v) = iter.next().expect("Expected argument after extern | native").as_string().parse::<u64>() else {
                                     let trap = Trap::InvalidPpType(arg, "u64");
                                     return Err(MTrap(file_path.into(), t.loc, trap))
                                 };
@@ -164,8 +167,9 @@ impl<'a> Mm<'a> {
 
         let libs = lib_paths.iter().map(|l| load_lib(l).unwrap()).collect::<Vec::<_>>();
         let externs = Mm::process_externs(&program, &libs);
+        Mm::check_natives(&program, &natives).unwrap();
 
-        comptime_labels_check(&program, &labels, &externs, file_path.into()).unwrap_or_report();
+        comptime_labels_check(&program, &labels, &externs, &natives, file_path.into()).unwrap_or_report();
 
         if DEBUG {
             let elapsed = time.elapsed().as_micros();
@@ -180,6 +184,7 @@ impl<'a> Mm<'a> {
             } else {
                 vec![program.len() - 1].into()
             },
+            natives,
             externs,
             labels,
             flags: Flags::new(),

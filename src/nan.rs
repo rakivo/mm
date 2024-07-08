@@ -25,6 +25,12 @@ impl std::fmt::Display for NaNBox {
     }
 }
 
+impl std::fmt::Debug for NaNBox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(&self, f)
+    }
+}
+
 impl NaNBox {
     #[inline(always)]
     fn mk_inf() -> f64 {

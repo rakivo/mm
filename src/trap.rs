@@ -4,6 +4,7 @@ use crate::{NaNBox, Inst, Loc, InstType, Type};
 pub enum Trap<'a> {
     InvalidOperand(&'a str),
     UndefinedSymbol(String),
+    UndeclaredNative(&'a String),
     StackOverflow(InstType),
     StackUnderflow(InstType),
     CallStackOverflow(&'a Inst),
@@ -29,6 +30,7 @@ impl std::fmt::Debug for Trap<'_> {
             CallStackUnderflow(inst)              => write!(f, "Call stack underflow, Last executed {inst}"),
             DivisionByZero(inst)                  => write!(f, "Division by zero, Last executed {inst:?}"),
             UndefinedSymbol(sym)                  => write!(f, "Undefined symbol: {sym}"),
+            UndeclaredNative(native)              => write!(f, "Undeclared native function: {native}"),
             InvalidOperand(inst)                  => write!(f, "Invalid operand, Last executed instruction: {inst}"),
             InvalidLabel(label, reason)           => write!(f, "Invalid label: `{label}`: {reason}"),
             InvalidFunction(func, reason)         => write!(f, "Invalid function: `{func}`: {reason}"),

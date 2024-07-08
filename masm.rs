@@ -19,6 +19,12 @@ fn find_flag(args: &Vec::<String>, flag: &str) -> Option::<String> {
     } else { None }
 }
 
+pub fn native_test(mm: &mut Mm) {
+    let stack = mm.stack_mut();
+    stack.push_back(NaNBox::from_u64(69));
+    stack.push_back(NaNBox::from_u64(420));
+}
+
 fn main() {
     let args = env::args().collect::<Vec<_>>();
 
@@ -28,7 +34,8 @@ fn main() {
     }
 
     let input = &args[1];
-    let (mut mm, program) = Mm::try_from_masm(&input, vec![]).unwrap_or_report();
+    let natives = natives![native_test];
+    let (mut mm, program) = Mm::try_from_masm(&input, vec![], natives).unwrap_or_report();
 
     let debug = args.contains(&"-d".to_owned());
     let output = find_flag(&args, "-o");

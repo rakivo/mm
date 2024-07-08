@@ -1,0 +1,14 @@
+native native_test
+
+#PRINT {
+    dmp 1
+    pop
+}
+
+_start:
+    call native_test
+
+    PRINT
+    PRINT
+
+    halt

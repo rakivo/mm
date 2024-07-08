@@ -19,6 +19,10 @@ fn find_flag(args: &Vec::<String>, flag: &str) -> Option::<String> {
     } else { None }
 }
 
+pub fn native_test(_: &mut Mm) {
+    println!("69420");
+}
+
 fn main() {
     let args = env::args().collect::<Vec<_>>();
     if args.len() < 2 {
@@ -32,7 +36,8 @@ fn main() {
         err
     }).unwrap();
 
-    let (mut mm, program) = Mm::from_binary(input, &buf).unwrap_or_report();
+    let natives = natives![native_test];
+    let (mut mm, program) = Mm::from_binary(input, &buf, natives, vec![]).unwrap_or_report();
 
     let debug = args.contains(&"-d".to_owned());
     let output = find_flag(&args, "-o");
