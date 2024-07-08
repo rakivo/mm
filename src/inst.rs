@@ -24,9 +24,9 @@ pub enum InstType {
 
     JE,
     JL,
-    JNGE,
+    JLE,
     JG,
-    JNLE,
+    JGE,
     JNE,
     JZ,
     JNZ,
@@ -69,9 +69,11 @@ impl InstType {
             "dup"    => Ok(InstType::DUP),
             "je"     => Ok(InstType::JE),
             "jl"     => Ok(InstType::JL),
-            "jnge"   => Ok(InstType::JNGE),
+            "jnge"   => Ok(InstType::JLE),
+            "jle"    => Ok(InstType::JLE),
             "jg"     => Ok(InstType::JG),
-            "jnle"   => Ok(InstType::JNLE),
+            "jnle"   => Ok(InstType::JGE),
+            "jge"    => Ok(InstType::JGE),
             "jne"    => Ok(InstType::JNE),
             "jz"     => Ok(InstType::JZ),
             "jnz"    => Ok(InstType::JNZ),
@@ -100,9 +102,9 @@ impl InstType {
             | InstType::DUP
             | InstType::JE
             | InstType::JL
-            | InstType::JNGE
+            | InstType::JLE
             | InstType::JG
-            | InstType::JNLE
+            | InstType::JGE
             | InstType::SWAP
             | InstType::JNE
             | InstType::JZ
@@ -138,9 +140,9 @@ impl std::fmt::Display for InstType {
             InstType::DUP    => write!(f, "dup"),
             InstType::JE     => write!(f, "je"),
             InstType::JL     => write!(f, "jl"),
-            InstType::JNGE   => write!(f, "jnge"),
+            InstType::JLE   => write!(f, "jnge"),
             InstType::JG     => write!(f, "jg"),
-            InstType::JNLE   => write!(f, "jnle"),
+            InstType::JGE   => write!(f, "jnle"),
             InstType::JNE    => write!(f, "jne"),
             InstType::JZ     => write!(f, "jz"),
             InstType::JNZ    => write!(f, "jnz"),
@@ -422,9 +424,9 @@ impl Inst {
             InstType::DUP    => extend_from_bytes_u64(11, *self.val.as_u64()),
             InstType::JE     => extend_to_bytes_string(12, self.val.as_string()),
             InstType::JL     => extend_to_bytes_string(13, self.val.as_string()),
-            InstType::JNGE   => extend_to_bytes_string(14, self.val.as_string()),
+            InstType::JLE   => extend_to_bytes_string(14, self.val.as_string()),
             InstType::JG     => extend_to_bytes_string(15, self.val.as_string()),
-            InstType::JNLE   => extend_to_bytes_string(16, self.val.as_string()),
+            InstType::JGE   => extend_to_bytes_string(16, self.val.as_string()),
             InstType::JNE    => extend_to_bytes_string(17, self.val.as_string()),
             InstType::JZ     => extend_to_bytes_string(18, self.val.as_string()),
             InstType::JNZ    => extend_to_bytes_string(19, self.val.as_string()),
@@ -465,9 +467,9 @@ impl Inst {
             Some(11) => inst_from_bytes!(n.bytes, DUP),
             Some(12) => inst_from_bytes!(bytes, JE),
             Some(13) => inst_from_bytes!(bytes, JL),
-            Some(14) => inst_from_bytes!(bytes, JNGE),
+            Some(14) => inst_from_bytes!(bytes, JLE),
             Some(15) => inst_from_bytes!(bytes, JG),
-            Some(16) => inst_from_bytes!(bytes, JNLE),
+            Some(16) => inst_from_bytes!(bytes, JGE),
             Some(17) => inst_from_bytes!(bytes, JNE),
             Some(18) => inst_from_bytes!(bytes, JZ),
             Some(19) => inst_from_bytes!(bytes, JNZ),
@@ -496,9 +498,9 @@ impl From<&Inst> for String {
                 InstType::DUP    => format!("    dup     {oper}", oper = inst.val.as_u64()),
                 InstType::JE     => format!("    je      {oper}", oper = inst.val.as_string()),
                 InstType::JL     => format!("    jl      {oper}", oper = inst.val.as_string()),
-                InstType::JNGE   => format!("    jnge    {oper}", oper = inst.val.as_string()),
+                InstType::JLE   => format!("    jnge    {oper}", oper = inst.val.as_string()),
                 InstType::JG     => format!("    jg      {oper}", oper = inst.val.as_string()),
-                InstType::JNLE   => format!("    jnle    {oper}", oper = inst.val.as_string()),
+                InstType::JGE   => format!("    jnle    {oper}", oper = inst.val.as_string()),
                 InstType::JNE    => format!("    jne     {oper}", oper = inst.val.as_string()),
                 InstType::JZ     => format!("    jz      {oper}", oper = inst.val.as_string()),
                 InstType::JNZ    => format!("    jnz     {oper}", oper = inst.val.as_string()),
@@ -537,9 +539,9 @@ impl std::fmt::Display for Inst {
             InstType::DUP    => { write!(f, "`DUP`, operand: `{oper}`", oper =  self.val.as_u64()) }
             InstType::JE     => write!(f, "`JE`, operand: `{oper}`", oper = self.val.as_string()),
             InstType::JL     => write!(f, "`JL`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JNGE   => write!(f, "`JNGE`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JLE   => write!(f, "`JLE`, operand: `{oper}`", oper = self.val.as_string()),
             InstType::JG     => write!(f, "`JG`, operand: `{oper}`", oper = self.val.as_string()),
-            InstType::JNLE   => write!(f, "`JNLE`, operand: `{oper}`", oper = self.val.as_string()),
+            InstType::JGE   => write!(f, "`JGE`, operand: `{oper}`", oper = self.val.as_string()),
             InstType::JNE    => write!(f, "`JNE`, operand: `{oper}`", oper = self.val.as_string()),
             InstType::JZ     => write!(f, "`JZ`, operand: `{oper}`", oper = self.val.as_string()),
             InstType::JNZ    => write!(f, "`JNZ`, operand: `{oper}`", oper = self.val.as_string()),

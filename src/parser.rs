@@ -18,9 +18,9 @@ fn comptime_labels_check<'a>(program: &'a Program, labels: &Labels, externs: &Ex
               JE
             | JL
             | JG
-            | JNGE
+            | JLE
             | JNE
-            | JNLE
+            | JGE
             | JZ
             | JNZ
             | JMP

@@ -6,7 +6,7 @@
 ; and subtracting fractions with a numerator of 4 and a denominator of each
 ; subsequent odd number. The more times you do this, the closer you will get to pi.
 
-#N 75000
+#N 750000
 #SYS_STDOUT 1
 
 ; calculate with current denominator

@@ -16,7 +16,7 @@ pub use lexer::*;
 pub use parser::*;
 pub use libloading::*;
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 pub type MResult<'a, T> = std::result::Result<T, Trap<'a>>;
 
@@ -236,6 +236,11 @@ impl<'a> Mm<'a> {
 
     fn execute_instruction(&mut self, program: &'a Program) -> Result::<(), Trap<'a>> {
         let inst = &program[self.ip].1;
+
+        if DEBUG {
+            println!("{ip}: {inst}", ip = self.ip);
+        }
+
         use InstType::*;
         match inst.typ {
             PUSH => {
@@ -303,14 +308,14 @@ impl<'a> Mm<'a> {
                 Ok(())
             }
 
-              JE
-            | JL
-            | JG
-            | JNGE
-            | JNE
-            | JNLE
-            | JZ
-            | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
+            JE
+                | JL
+                | JG
+                | JLE
+                | JNE
+                | JGE
+                | JZ
+                | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
 
             JMP => {
                 let label = inst.val.as_string();
@@ -402,12 +407,15 @@ impl<'a> Mm<'a> {
         }
 
         let time = Instant::now();
-        let mut limit = limit.unwrap_or(usize::MAX);
+
         let file_path: Cow::<str> = self.file_path.to_owned().into();
+
+        let mut count = 0;
+        let limit = limit.unwrap_or(usize::MAX);
 
         // let mut instruction_times = HashMap::<&InstType, u128>::new();
 
-        while !self.halt() && limit > 0 {
+        while !self.halt() && count < limit {
             let loc = program[self.ip].0;
 
             // let inst_type = &program[self.ip].1.typ;
@@ -428,11 +436,11 @@ impl<'a> Mm<'a> {
             // })
             // .or_insert(elapsed_time);
 
-            limit -= 1;
+            count += 1;
         }
 
         let elapsed = time.elapsed().as_micros();
-        println!("Execution of the program took: {elapsed}ms");
+        println!("Execution of the program took: {elapsed}ms and {count} iterations were performed");
 
         // for (inst_type, max_time) in &instruction_times {
         //     println!("Max time for instruction type {inst_type}: {max_time}μs");
