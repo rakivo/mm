@@ -12,13 +12,15 @@ dmp_420:
     jmp end
 
 dmp_69:
-    cmp 69
+    push 69
+    cmp
     DMP 69
     jmp end
 
 _start:
     push 420
-    cmp 421
+    push 421
+    cmp
     jge dmp_420
     jmp dmp_69
 

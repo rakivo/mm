@@ -35,7 +35,8 @@ start_operations:
     dmp 1
 
 check_operations:
-    cmp 27      ; Compare the top stack element with 27
+    push 27
+    cmp         ; Compare the top stack element with 27
     je equal_27
     jl less_than_27
     jg greater_than_27
@@ -93,7 +94,7 @@ loop_start:
     dmp 1
     dec
     dup 1
-    cmp 0
+    cmp
     jg loop_start
 
 final_operations:
