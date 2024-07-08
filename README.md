@@ -10,7 +10,7 @@ $ make -j4 && ./build/masm ./masm/pi.masm
 # For example you can take a look at how you can calculate the PI number in masm:
 > Example from masm/pi.masm
 ```asm
-#N 7500
+#N 750000
 #SYS_STDOUT 1
 
 ; calculate with current denominator
@@ -50,7 +50,9 @@ loop:
     swap 2
     dec
 
-    cmp 0
+    push 0
+    cmp
+    pop
     jne loop
 
     ; clean the stack and only have pi left
