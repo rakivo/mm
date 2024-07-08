@@ -274,7 +274,7 @@ impl<'a> Mm<'a> {
         let inst = &program[self.ip].1;
 
         if DEBUG {
-            println!("{ip}: {inst}", ip = self.ip);
+            println!("{ip}: {inst}, {self}", ip = self.ip);
         }
 
         use InstType::*;
@@ -562,8 +562,8 @@ impl<'a> Mm<'a> {
         let mut f = File::create(file_path)?;
         let time = Instant::now();
 
-        for inst in program.iter() {
-            let inst_str = format!("{inst}\n", inst = String::from(&inst.1));
+        for (_, inst) in program.iter() {
+            let inst_str = format!("{inst}\n", inst = String::from(inst));
             f.write_all(&inst_str.as_bytes())?;
         }
 

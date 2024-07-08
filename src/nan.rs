@@ -1,3 +1,5 @@
+// Stolen from: <https://github.com/rakivo/nan-boxing>
+
 const EXP_MASK: u64 = ((1 << 11) - 1) << 52;
 const TYPE_MASK: u64 = ((1 << 4) - 1) << 48;
 const VALUE_MASK: u64 = (1 << 48) - 1;
@@ -11,21 +13,31 @@ pub enum Type {
     Ptr,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy)]
 pub struct NaNBox(pub f64);
+
+impl std::clone::Clone for NaNBox {
+    #[inline]
+    fn clone(&self) -> Self {
+        NaNBox(self.0)
+    }
+}
 
 impl std::fmt::Display for NaNBox {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // println!("{:#064b}", self.0.to_bits());
         match self.get_type() {
-            Ok(Type::F64) => write!(f, "{}", self.as_f64()),
+            Ok(Type::F64) => write!(f, "{:?}", self.as_f64()),
             Ok(Type::I64) => write!(f, "{}", self.as_i64()),
             Ok(Type::U64) => write!(f, "{}", self.as_u64()),
-            _ => todo!()
+            Ok(Type::Ptr) => write!(f, "{:#?}", self.as_ptr()),
+            Err(bit)      => write!(f, "Failed to get type of: {f}, type bit is: {bit}", f = self.0)
         }
     }
 }
 
 impl std::fmt::Debug for NaNBox {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         std::fmt::Display::fmt(&self, f)
     }
@@ -51,10 +63,8 @@ impl NaNBox {
     }
 
     #[inline(always)]
-    pub fn get_type(&self) -> Result::<Type, ()> {
-        if self.is_f64() {
-            return Ok(Type::F64)
-        }
+    pub fn get_type(&self) -> Result::<Type, u64> {
+        if self.is_f64() { return Ok(Type::F64) }
 
         let bits = self.0.to_bits();
         match (bits & TYPE_MASK) >> 48 {
@@ -62,7 +72,7 @@ impl NaNBox {
             2 => Ok(Type::I64),
             3 => Ok(Type::U64),
             4 => Ok(Type::Ptr),
-            _ => Err(())
+            b @ _ => Err(b)
         }
     }
 
