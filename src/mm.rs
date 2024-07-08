@@ -16,6 +16,10 @@ pub use lexer::*;
 pub use parser::*;
 pub use libloading::*;
 
+#[cfg(feature = "dbg")]
+const DEBUG: bool = true;
+
+#[cfg(not(feature = "dbg"))]
 const DEBUG: bool = false;
 
 pub type MResult<'a, T> = std::result::Result<T, Trap<'a>>;
@@ -451,28 +455,33 @@ impl<'a> Mm<'a> {
         let file_path: Cow::<str> = self.file_path.to_owned().into();
         let mut limit = limit.unwrap_or(usize::MAX);
 
-        // let mut instruction_times = HashMap::<&InstType, u128>::new();
+        #[cfg(feature = "dbg")]
+        {
+            let mut times = HashMap::<&InstType, u128>::new();
+        }
 
         while !self.halt() && limit > 0 {
             let loc = program[self.ip].0;
 
-            // let inst_type = &program[self.ip].1.typ;
-            // let inst_time = Instant::now();
+            #[cfg(feature = "dbg")]
+            {
+                let typ = &program[self.ip].1.typ;
+                let time = Instant::now();
+            }
 
             self.execute_instruction(program).map_err(|trap| {
                 MTrap::from((file_path.to_owned(), loc, trap))
             })?;
 
-            // let elapsed_time = inst_time.elapsed().as_micros();
-
-            // instruction_times
-            //     .entry(inst_type)
-            //     .and_modify(|e| {
-            //     if *e < elapsed_time {
-            //         *e = elapsed_time;
-            //     }
-            // })
-            // .or_insert(elapsed_time);
+            #[cfg(feature = "dbg")]
+            {
+                let elapsed = inst_time.elapsed().as_micros();
+                times.entry(inst_type).and_modify(|e| {
+                    if *e < elapsed_time {
+                        *e = elapsed_time;
+                    }
+                }).or_insert(elapsed_time);
+            }
 
             limit -= 1;
         }
@@ -480,9 +489,10 @@ impl<'a> Mm<'a> {
         let elapsed = time.elapsed().as_micros();
         println!("Execution of the program took: {elapsed}ms");
 
-        // for (inst_type, max_time) in &instruction_times {
-        //     println!("Max time for instruction type {inst_type}: {max_time}μs");
-        // }
+        #[cfg(feature = "dbg")]
+        {
+            times.iter().for_each(|(typ, time)| println!("Max time for instruction type {typ}: {time}ms"));
+        }
 
         Ok(())
     }
