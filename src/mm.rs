@@ -1,4 +1,8 @@
-use std::{borrow::Cow, collections::{HashMap, VecDeque}, time::Instant};
+use std::{
+    borrow::Cow,
+    time::Instant,
+    collections::{HashMap, VecDeque},
+};
 
 pub mod nan;
 pub mod flag;
@@ -20,7 +24,7 @@ pub use libloading::*;
 const DEBUG: bool = true;
 
 #[cfg(not(feature = "dbg"))]
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 pub type MResult<'a, T> = std::result::Result<T, Trap<'a>>;
 
@@ -28,12 +32,15 @@ pub type Program = Vec::<(Loc, Inst)>;
 
 pub type Labels = HashMap::<String, usize>;
 
-pub type NativeFn = fn(&mut Mm);
-pub type Natives = HashMap::<&'static str, for<'a, 'b> fn(&'a mut Mm<'b>)>;
+pub type NativeFn = for<'a, 'b> fn(&'a mut Mm<'b>);
+pub type Natives = HashMap::<&'static str, NativeFn>;
 
 pub type Lib = (*const (), usize);
 pub type Libs = Vec::<Lib>;
+
 pub type Externs = HashMap::<String, Lib>;
+
+pub const MEMORY_CAP: usize = 8 * 128;
 
 pub struct Mm<'a> {
     pub file_path: &'a str,
@@ -44,6 +51,9 @@ pub struct Mm<'a> {
     natives: Natives,
     externs: Externs,
 
+    memory: [u8; MEMORY_CAP],
+    mc: usize,
+
     labels: Labels,
     flags: Flags,
     ip: usize,
@@ -53,31 +63,32 @@ pub struct Mm<'a> {
 impl std::fmt::Debug for Mm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack size: {size}\n", size = self.stack.len())?;
-        write!(f, "stack:")?;
-        let mut i = 0;
-        while i < self.stack.len() {
-            let oper = self.stack[i];
-            write!(f, ", {oper}")?;
-            i += 1;
+        write!(f, ", stack: {:?}", self.stack)?;
+        if self.mc > 0 {
+            write!(f, ", memory: {:?}", &self.memory[0..self.mc])?;
         }
+
         Ok(())
     }
 }
 
 impl std::fmt::Display for Mm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "stack: ")?;
-        if let Some(first) = self.stack.front() {
-            write!(f, "{first}")?;
-            let (mut i, n) = (1, self.stack.len());
-            while i < n {
-                let oper = self.stack[i];
-                write!(f, ", {oper}")?;
-                i += 1;
-            }
+        write!(f, "stack: {:?}", self.stack)?;
+        if self.mc > 0 {
+            write!(f, ", memory: {:?}", &self.memory[0..self.mc])?;
         }
         Ok(())
     }
+}
+
+#[macro_export]
+macro_rules! natives {
+    ($($n: tt), *) => {{
+        let mut natives = std::collections::HashMap::<&'static str, for<'a, 'b> fn(&'a mut mm::Mm<'b>)>::new();
+        $(natives.insert(stringify!($n), $n);)*
+        natives
+    }};
 }
 
 macro_rules! convert {
@@ -109,12 +120,37 @@ macro_rules! convert {
     };
 }
 
-#[macro_export]
-macro_rules! natives {
-    ($($n: tt), *) => {{
-        let mut natives = std::collections::HashMap::<&'static str, for<'a, 'b> fn(&'a mut mm::Mm<'b>)>::new();
-        $(natives.insert(stringify!($n), $n);)*
-        natives
+macro_rules! readop {
+    ($s: expr, $inst: expr, $ty: ty) => {
+        if let Some(last) = $s.stack.pop_back() {
+            let addr = last.as_u64() as usize;
+            if addr >= $s.mc {
+                return Err(Trap::IllegalMemoryAccess($inst.typ.to_owned(), addr))
+            }
+            let tmp: $ty = $s.memory[addr] as $ty;
+            $s.stack.push_back(NaNBox::from_u64(tmp as _));
+            $s.ip += 1;
+            Ok(())
+        } else {
+            Err(Trap::StackUnderflow($inst.typ.to_owned()))
+        }
+    };
+}
+
+macro_rules! writeop {
+    ($s: expr, $inst: expr, $ty: ty) => {{
+        if $s.stack.len() < 2 {
+            return Err(Trap::StackUnderflow($inst.typ.to_owned()))
+        }
+        let last: $ty = $s.stack.pop_back().unwrap().as_u64() as $ty;
+        let prelast = $s.stack.pop_back().unwrap();
+        let addr = prelast.as_u64() as usize;
+        if addr >= MEMORY_CAP {
+            return Err(Trap::IllegalMemoryAccess($inst.typ.to_owned(), addr))
+        }
+        $s.memory[addr] = last as u8;
+        $s.ip += 1;
+        Ok(())
     }};
 }
 
@@ -154,18 +190,14 @@ impl<'a> Mm<'a> {
         }
     }
 
-    // TODO: do it at comptime
     #[inline]
     fn typecheck(val: NaNBox, expected: Type) -> MResult::<'a, ()> {
         let got = val.get_type().unwrap();
-
         match (&got, &expected) {
             (Type::I64, Type::I64) |
             (Type::U64, Type::I64) |
             (Type::I64, Type::U64) |
             (Type::U64, Type::U64) => Ok(()),
-            // ^ It's ok, trust me. :-)
-
             _ => if got != expected {
                 Err(Trap::InvalidType(val, got, expected))
             } else {
@@ -189,7 +221,6 @@ impl<'a> Mm<'a> {
         &mut self.stack
     }
 
-    #[inline]
     fn two_opers_finst(&mut self, inst: InstType, last: NaNBox) -> MResult<'static, ()> {
         let prelast = self.stack.back_mut().unwrap();
 
@@ -233,7 +264,7 @@ impl<'a> Mm<'a> {
         let stack_len = self.stack.len();
         if stack_len < 2 {
             eprintln!("ERROR: Not enough operands on the stack, needed: 2, have: {stack_len}");
-            eprintln!("Last executed instruction: {inst:?}");
+            eprintln!("Last executed instruction: {inst}");
             return Err(Trap::StackUnderflow(inst))
         }
 
@@ -328,8 +359,10 @@ impl<'a> Mm<'a> {
             FMUL => self.two_opers_inst(FMUL, true, 2),
             FDIV => self.two_opers_inst(FDIV, true, 2),
 
-            CMP => if let Some(ref last) = self.stack.back() {
-                self.flags.cmp(&last.as_u64(), &inst.val.as_nan().as_u64());
+            CMP => if self.stack.len() > 1 {
+                let prelast = self.stack[self.stack.len() - 2];
+                let last = self.stack.pop_back().unwrap();
+                self.flags.cmp(prelast.as_u64(), last.as_u64());
                 self.ip += 1;
                 Ok(())
             } else {
@@ -432,6 +465,16 @@ impl<'a> Mm<'a> {
             I2U => convert!(i.self, inst, as_i64, 0, from_u64, I64),
             U2I => convert!(self, inst, as_u64, from_i64, U64),
             U2F => convert!(self, inst, as_u64, from_f64, U64),
+
+            READ8  => readop!(self, inst, u8),
+            READ16 => readop!(self, inst, u16),
+            READ32 => readop!(self, inst, u32),
+            READ64 => readop!(self, inst, u64),
+
+            WRITE8  => writeop!(self, inst, u8),
+            WRITE16 => writeop!(self, inst, u16),
+            WRITE32 => writeop!(self, inst, u32),
+            WRITE64 => writeop!(self, inst, u64),
 
             HALT => {
                 self.halt = true;
@@ -555,6 +598,8 @@ impl<'a> Mm<'a> {
             } else {
                 VecDeque::with_capacity(Mm::CALL_STACK_CAP)
             },
+            memory: [0; MEMORY_CAP],
+            mc: 0,
             natives,
             externs,
             labels,

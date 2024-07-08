@@ -47,7 +47,8 @@
   (defconst masm-instructions
     '("nop" "push" "pop" "inc" "dec" "iadd" "isub" "imul" "idiv" "fadd"
       "fsub" "fmul" "fdiv" "cmp" "swap" "dup" "je" "jl" "jnge" "jg"
-      "jnle" "jne" "jz" "jnz" "jmp" "label" "bot" "dmp" "call" "ret" "jle" "jge" "extern" "f2i" "f2u" "i2f" "i2u" "u2i" "u2f" "halt" "native")))
+      "jnle" "jne" "jz" "jnz" "jmp" "label" "bot" "dmp" "call" "ret" "jle" "jge" "extern" "f2i" "f2u" "i2f" "i2u" "u2i" "u2f" "halt" "native" "write8" "read8" "read16" "write16" "read32" "write32" "read64" "write64")))
+
 
 (defconst masm-highlights
   `((,(regexp-opt masm-instructions 'symbols) . font-lock-keyword-face)

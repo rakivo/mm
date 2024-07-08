@@ -34,6 +34,7 @@ syn keyword masmInstruction nop push pop inc dec iadd isub imul idiv fadd
 syn keyword masmInstruction fsub fmul fdiv cmp swap dup je jl jnge jg
 syn keyword masmInstruction jnle jne jz jnz jmp label bot dmp call ret extern halt
 syn keyword masmInstruction f2i f2u i2f i2u u2i u2f jle jge native
+syn keyword masmInstruction write8 read16 write16 read32 write32 read64 write64
 
 " Define macros starting with #
 syn match masmMacro "#[a-zA-Z_][a-zA-Z0-9_]*"

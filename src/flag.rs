@@ -49,11 +49,11 @@ impl Flags {
         Flags(0)
     }
 
-    pub fn cmp(&mut self, a: &u64, b: &u64) {
+    pub fn cmp(&mut self, a: u64, b: u64) {
         self.reset_all();
-        ifc!(self, a == b,  E, Z           | NE, LE, GE, NZ);
-        ifc!(self, a < b,   L, LE          | G, GE);
-        ifc!(self, *a != 0, NZ             | Z);
+        ifc!(self, a == b, E, Z           | NE, LE, GE, NZ);
+        ifc!(self, a < b,  L, LE          | G, GE);
+        ifc!(self, a != 0, NZ             | Z);
     }
 
     #[inline(always)]

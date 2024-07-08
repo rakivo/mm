@@ -16,6 +16,7 @@ pub enum Trap<'a> {
     InvalidPpType(String, &'a str),
     InvalidType(NaNBox, Type, Type),
     InvalidFunction(&'a str, &'a str),
+    IllegalMemoryAccess(InstType, usize),
     FailedConversion(NaNBox, Type, Type),
     OperationWithDifferentTypes(Type, Type)
 }
@@ -24,14 +25,15 @@ impl std::fmt::Debug for Trap<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use Trap::*;
         match self {
-            StackOverflow(inst)                   => write!(f, "Stack overflow, Last executed {inst:?}"),
-            StackUnderflow(inst)                  => write!(f, "Stack underflow, Last executed {inst:?}"),
+            StackOverflow(inst)                   => write!(f, "Stack overflow, Last executed {inst}"),
+            StackUnderflow(inst)                  => write!(f, "Stack underflow, Last executed {inst}"),
             CallStackOverflow(inst)               => write!(f, "Call stack overflow, Last executed {inst}"),
             CallStackUnderflow(inst)              => write!(f, "Call stack underflow, Last executed {inst}"),
-            DivisionByZero(inst)                  => write!(f, "Division by zero, Last executed {inst:?}"),
+            DivisionByZero(inst)                  => write!(f, "Division by zero, Last executed {inst}"),
             UndefinedSymbol(sym)                  => write!(f, "Undefined symbol: {sym}"),
             UndeclaredNative(native)              => write!(f, "Undeclared native function: {native}"),
             InvalidOperand(inst)                  => write!(f, "Invalid operand, Last executed instruction: {inst}"),
+            IllegalMemoryAccess(inst, addr)       => write!(f, "Illegal memory access: {inst}, addr: {addr}"),
             InvalidLabel(label, reason)           => write!(f, "Invalid label: `{label}`: {reason}"),
             InvalidFunction(func, reason)         => write!(f, "Invalid function: `{func}`: {reason}"),
             NoEntryPointFound(file_path)          => write!(f, "No entry point found in: {file_path}"),

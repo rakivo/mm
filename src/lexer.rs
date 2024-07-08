@@ -6,6 +6,8 @@ use std::{
     iter::{Enumerate, Peekable},
 };
 
+use crate::get_truth;
+
 mod lexer {
     pub type Iterator<'a> = std::vec::IntoIter::<(usize, &'a str)>;
 }
@@ -109,26 +111,30 @@ impl<'a> Lexer {
         }
     }
 
+    fn handle_include(s: String, mm: &mut MacrosMap, ets: &mut ETokens) {
+        if s.ends_with(".masm") {
+            if let Ok(content) = read_to_string(&s) {
+                let lexer = Self::new(s.to_string());
+                let mut iter = content.lines().peekable().enumerate();
+                let (ets_, mut mm_) = lexer.lex_file(&mut iter);
+                mm_.extend(mm.into_iter().map(|(a, b)| (a.to_owned(), b.to_owned())));
+                *mm = mm_;
+                ets.extend(ets_);
+            } else {
+                panic!("No such file: {f}", f = s)
+            }
+        } else {
+            panic!("Unsupported extension: {e}", e = s.chars().rev().take_while(|x| x != &'.').collect::<std::string::String>().chars().rev().collect::<std::string::String>())
+        }
+    }
+
     fn match_token(iter: &mut Iterator, mm: &mut MacrosMap, t: Token, ets: &mut ETokens) {
         use { TokenType::*, PpType::* };
 
         match &t.typ {
             Pp(pp) => {
                 match pp {
-                    Include => if t.val.ends_with(".masm") {
-                        if let Ok(content) = read_to_string(&t.val) {
-                            let lexer = Self::new(t.val.to_string());
-                            let mut iter = content.lines().peekable().enumerate();
-                            let (ets_, mut mm_) = lexer.lex_file(&mut iter);
-                            mm_.extend(mm.into_iter().map(|(a, b)| (a.to_owned(), b.to_owned())));
-                            *mm = mm_;
-                            ets.extend(ets_);
-                        } else {
-                            panic!("No such file: {f}", f = t.val)
-                        }
-                    } else {
-                        panic!("Unsupported extension: {e}", e = t.val.chars().rev().take_while(|x| x != &'.').collect::<std::string::String>().chars().rev().collect::<std::string::String>())
-                    }
+                    Include => Self::handle_include(t.val, mm, ets),
                     _ => {}
                 }
             }
@@ -136,7 +142,18 @@ impl<'a> Lexer {
                 match &m.typ {
                     Pp(pp) => match pp {
                         Include => unreachable!(),
-                        SingleLine { value } => ets.push(EToken::Expansion(value.to_owned())),
+                        SingleLine { value } => {
+                            let value = get_truth(value.to_owned(), &mm);
+                            if value.starts_with('#') {
+                                if matches!(value.chars().nth(1), Some(ch) if ch == '"') {
+                                    Self::handle_include(value[2..value.len() - 1].to_owned(), mm, ets)
+                                } else {
+                                    todo!()
+                                }
+                            } else {
+                                ets.push(EToken::Expansion(value))
+                            }
+                        },
                         MultiLine { body, args } => {
                             let prev_row = t.loc.0;
                             let mut args_ = Vec::with_capacity(10);

@@ -46,7 +46,9 @@ loop:
     swap 2
     dec
 
-    cmp 0
+    push 0
+    cmp
+    pop
     jne loop
 
     ; clean the stack and only have pi left

@@ -5,7 +5,7 @@ use std::{
     fs::read_to_string,
     collections::VecDeque,
 };
-use crate::{load_lib, EToken, Externs, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, MacrosMap, Mm, NaNBox, Natives, PpType, Program, Token, TokenType, Trap, DEBUG};
+use crate::{load_lib, MEMORY_CAP, EToken, Externs, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, MacrosMap, Mm, NaNBox, Natives, PpType, Program, Token, TokenType, Trap, DEBUG};
 
 const ENTRY_POINT: &str = "_start";
 
@@ -38,7 +38,7 @@ fn comptime_labels_check<'a>(program: &'a Program, labels: &Labels, externs: &Ex
     Ok(())
 }
 
-fn get_truth<'a>(s: String, map: &MacrosMap) -> String {
+pub fn get_truth<'a>(s: String, map: &MacrosMap) -> String {
     if let Some(truth) = map.get(&s) {
         let TokenType::Pp(ref pp) = truth.typ else { return s };
         match pp {
@@ -96,7 +96,7 @@ impl<'a> Mm<'a> {
                         let arg = get_truth(arg_.as_string(), &mm);
 
                         let val = match typ {
-                            InstType::PUSH | InstType::CMP => {
+                            InstType::PUSH => {
                                 if arg.contains('.') {
                                     let Ok(v) = arg.parse::<f64>() else {
                                         let trap = Trap::InvalidPpType(arg, "u64 or f64");
@@ -111,7 +111,17 @@ impl<'a> Mm<'a> {
                                     InstValue::NaN(NaNBox::from_i64(v))
                                 }
                             }
-                            InstType::DUP | InstType::SWAP => {
+
+                              InstType::DUP
+                            | InstType::SWAP
+                            | InstType::READ8
+                            | InstType::WRITE8
+                            | InstType::READ16
+                            | InstType::WRITE16
+                            | InstType::READ32
+                            | InstType::WRITE32
+                            | InstType::READ64
+                            | InstType::WRITE64 => {
                                 let Ok(v) = arg.parse::<u64>() else {
                                     let trap = Trap::InvalidPpType(arg, "u64 or f64");
                                     return Err(MTrap(file_path.into(), t.loc, trap))
@@ -184,6 +194,8 @@ impl<'a> Mm<'a> {
             } else {
                 vec![program.len() - 1].into()
             },
+            memory: [0; MEMORY_CAP],
+            mc: 0,
             natives,
             externs,
             labels,
