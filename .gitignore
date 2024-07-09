@@ -12,3 +12,4 @@ lib
 extern.masm
 testt
 lib.rs
+expected
