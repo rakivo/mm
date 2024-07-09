@@ -48,7 +48,6 @@ loop:
 
     push 0
     cmp
-    pop
     jne loop
 
     ; clean the stack and only have pi left

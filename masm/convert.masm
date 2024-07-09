@@ -39,4 +39,4 @@ _start:
     ; f2u
     ; dmp 1
 
-    ret
+    halt

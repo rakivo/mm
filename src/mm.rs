@@ -38,6 +38,8 @@ pub type Libs = Vec::<Lib>;
 
 pub type Externs = HashMap::<String, Lib>;
 
+const ENTRY_POINT: &str = "_start";
+
 pub const MEMORY_CAP: usize = 8 * 128;
 
 pub struct Mm<'a> {
@@ -62,6 +64,7 @@ impl std::fmt::Debug for Mm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack size: {size}\n", size = self.stack.len())?;
         write!(f, ", stack: {:?}", self.stack)?;
+        write!(f, ", call stack: {:?}", self.call_stack)?;
         if self.mc > 0 {
             write!(f, ", memory: {:?}", &self.memory[0..self.mc])?;
         }
@@ -73,6 +76,7 @@ impl std::fmt::Debug for Mm<'_> {
 impl std::fmt::Display for Mm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: {:?}", self.stack)?;
+        write!(f, ", call stack: {:?}", self.call_stack)?;
         if self.mc > 0 {
             write!(f, ", memory: {:?}", &self.memory[0..self.mc])?;
         }
@@ -571,12 +575,16 @@ impl<'a> Mm<'a> {
             };
             ip += 1;
             i += size;
-            program.push(((69, 69), inst));
+            program.push(((68, 69), inst));
         }
+
+        let Some(entry_point) = labels.iter().find(|(l, _)| l == &&ENTRY_POINT).map(|(_, i)| *i) else {
+            return Err(Trap::NoEntryPointFound(file_path))
+        };
 
         if matches!(program.last(), Some(last) if last.1.typ != InstType::HALT) {
             let inst = Inst { typ: InstType::HALT, val: InstValue::None };
-            program.push(((69, 69), inst));
+            program.push(((68, 69), inst));
         }
 
         if DEBUG {
@@ -592,18 +600,14 @@ impl<'a> Mm<'a> {
         let mm = Mm {
             file_path,
             stack: VecDeque::with_capacity(1024),
-            call_stack: if let Some(last) = program.last() {
-                vec![last.0.0].into()
-            } else {
-                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
-            },
+            call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
             memory: [0; MEMORY_CAP],
             mc: 0,
             natives,
             externs,
             labels,
             flags: Flags::new(),
-            ip: 0,
+            ip: entry_point,
             halt: false,
         };
 

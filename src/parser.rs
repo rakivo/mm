@@ -5,9 +5,7 @@ use std::{
     fs::read_to_string,
     collections::VecDeque,
 };
-use crate::{MEMORY_CAP, EToken, Externs, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, MacrosMap, Mm, NaNBox, Natives, PpType, Program, Token, TokenType, Trap, DEBUG};
-
-const ENTRY_POINT: &str = "_start";
+use crate::{MEMORY_CAP, EToken, Externs, Flags, Inst, InstType, InstValue, Labels, Lexer, MTrap, MacrosMap, Mm, NaNBox, Natives, PpType, Program, Token, TokenType, Trap, DEBUG, ENTRY_POINT};
 
 pub type MMResult<'a, T> = std::result::Result::<T, MTrap<'a>>;
 
@@ -190,11 +188,7 @@ impl<'a> Mm<'a> {
         let mm = Mm {
             file_path,
             stack: VecDeque::with_capacity(1024),
-            call_stack: if program.is_empty() {
-                VecDeque::with_capacity(Mm::CALL_STACK_CAP)
-            } else {
-                vec![program.len() - 1].into()
-            },
+            call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
             memory: [0; MEMORY_CAP],
             mc: 0,
             natives,

@@ -18,4 +18,4 @@ _start:
     dmp 1
 
     write 34 35 iadd SYS_STDOUT
-    ret
+    halt
