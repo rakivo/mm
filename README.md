@@ -61,3 +61,7 @@ loop:
 
     dmp SYS_STDOUT ; print the value
 ```
+
+## For developers:
+> You can test all the masm programs in `masm` directory and record their output with: `python test.py -r`.
+> Before doing a PR, ensure that all the programs in the `masm` directory pass the tests with: `python test.py`, without `-r` flag.
