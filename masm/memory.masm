@@ -1,20 +1,26 @@
-; #N 10
+#N 10
 
 _start:
-    push 0
-    push 256
+    push 1
+
+loop:
+    dup 0
+    dup 0
     write8
-    ; push 1
 
-; loop:
-;     dup 0
-;     dup 0
-;     write8
+    inc
 
-;     inc
+    push N
+    cmp
 
-;     push N
-;     cmp
+    jle loop
 
-;     jle loop
-;     halt
+    push 5
+    read8
+    dmp 1
+
+    push 6
+    read8
+    dmp 1
+
+    halt

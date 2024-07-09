@@ -190,7 +190,6 @@ impl<'a> Mm<'a> {
             stack: VecDeque::with_capacity(1024),
             call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
             memory: [0; MEMORY_CAP],
-            mc: 0,
             natives,
             externs,
             labels,

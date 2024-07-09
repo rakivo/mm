@@ -52,7 +52,6 @@ pub struct Mm<'a> {
     externs: Externs,
 
     memory: [u8; MEMORY_CAP],
-    mc: usize,
 
     labels: Labels,
     flags: Flags,
@@ -65,10 +64,7 @@ impl std::fmt::Debug for Mm<'_> {
         write!(f, "stack size: {size}\n", size = self.stack.len())?;
         write!(f, ", stack: {:?}", self.stack)?;
         write!(f, ", call stack: {:?}", self.call_stack)?;
-        if self.mc > 0 {
-            write!(f, ", memory: {:?}", &self.memory[0..self.mc])?;
-        }
-
+        write!(f, ", memory: {:?}", &self.memory[0..50])?;
         Ok(())
     }
 }
@@ -77,9 +73,7 @@ impl std::fmt::Display for Mm<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "stack: {:?}", self.stack)?;
         write!(f, ", call stack: {:?}", self.call_stack)?;
-        if self.mc > 0 {
-            write!(f, ", memory: {:?}", &self.memory[0..self.mc])?;
-        }
+        write!(f, ", memory: {:?}", &self.memory[0..50])?;
         Ok(())
     }
 }
@@ -89,7 +83,7 @@ macro_rules! natives {
     ($($n: tt), *) => {{
         let mut natives = std::collections::HashMap::<&'static str, for<'a, 'b> fn(&'a mut mm::Mm<'b>)>::new();
         $(natives.insert(stringify!($n), $n);)*
-        natives
+            natives
     }};
 }
 
@@ -126,7 +120,7 @@ macro_rules! readop {
     ($s: expr, $inst: expr, $ty: ty) => {
         if let Some(last) = $s.stack.pop_back() {
             let addr = last.as_u64() as usize;
-            if addr >= $s.mc {
+            if addr >= MEMORY_CAP {
                 return Err(Trap::IllegalMemoryAccess($inst.typ.to_owned(), addr))
             }
             let tmp: $ty = $s.memory[addr] as $ty;
@@ -383,14 +377,14 @@ impl<'a> Mm<'a> {
                 Ok(())
             }
 
-              JE
-            | JL
-            | JG
-            | JLE
-            | JNE
-            | JGE
-            | JZ
-            | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
+            JE
+                | JL
+                | JG
+                | JLE
+                | JNE
+                | JGE
+                | JZ
+                | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
 
             JMP => {
                 let label = inst.val.as_string();
@@ -602,7 +596,6 @@ impl<'a> Mm<'a> {
             stack: VecDeque::with_capacity(1024),
             call_stack: VecDeque::with_capacity(Mm::CALL_STACK_CAP),
             memory: [0; MEMORY_CAP],
-            mc: 0,
             natives,
             externs,
             labels,
