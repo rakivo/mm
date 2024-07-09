@@ -16,8 +16,8 @@ EXPECTED_DIR = 'expected'
 MASM_DIR = 'masm'
 DEMASM_DIR = 'demasm'
 
-MASM = os.path.join('.', BUILD_DIR, MASM_DIR)
-DEMASM = os.path.join('.', BUILD_DIR, DEMASM_DIR)
+MASM = os.path.join(BUILD_DIR, MASM_DIR)
+DEMASM = os.path.join(BUILD_DIR, DEMASM_DIR)
 
 LOG_CMD   = '[CMD]'
 LOG_INFO  = '[INFO]'
