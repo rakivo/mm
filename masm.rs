@@ -39,11 +39,14 @@ fn main() {
 
     let debug = args.contains(&"-d".to_owned());
     let output = find_flag(&args, "-o");
+    let x86_64 = find_flag(&args, "-S");
     let limit = find_flag(&args, "-l").map(|x| x.parse::<usize>().map_err(|err| {
         panic!("Failed to parse argument for flag: -l: {err}")
     }).unwrap());
 
-    if let Some(out) = output {
+    if let Some(x86_64) = x86_64 {
+        mm.generate_x86_64(&x86_64, &program).unwrap_or_report();
+    } else if let Some(out) = output {
         mm.to_binary(&out, &program).unwrap_or_report();
     } else {
         mm.execute_program(debug, limit, &program).unwrap_or_report();

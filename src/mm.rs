@@ -1,7 +1,5 @@
 use std::{
-    borrow::Cow,
-    time::Instant,
-    collections::{HashMap, VecDeque},
+    borrow::Cow, collections::{HashMap, VecDeque}, time::Instant
 };
 
 pub mod nan;
@@ -617,6 +615,293 @@ impl<'a> Mm<'a> {
             let inst_str = format!("{inst}\n", inst = String::from(inst));
             f.write_all(&inst_str.as_bytes())?;
         }
+
+        if DEBUG {
+            let elapsed = time.elapsed().as_micros();
+            println!("Generation took: {elapsed} microseconds");
+        }
+
+        Ok(())
+    }
+
+    fn generate_x86_64_instruction<W>(&self, inst: &Inst, f: &mut W) -> std::io::Result::<()>
+    where
+        W: std::io::Write
+    {
+        use InstType::*;
+        match inst.typ {
+            HALT => {
+                write!(f, "    ; -- halt --\n")?;
+                if cfg!(windows) {
+                    write!(f, "    xor rax,    rax\n")?;
+                    write!(f, "    mov rcx,    rax\n")?;
+                    write!(f, "    mov rax,    4500h\n")?;
+                    write!(f, "    syscall\n")?
+                } else {
+                    write!(f, "    mov rax,    60\n")?;
+                    write!(f, "    xor rdi,    rdi\n")?;
+                    write!(f, "    syscall\n")?
+                }
+            }
+            PUSH => {
+                use InstValue::*;
+                match inst.val {
+                    I64(ref oper) => {
+                        write!(f, "    ; -- push i64 {oper} --\n")?;
+                        write!(f, "    push        qword 0x{oper:X}\n")?
+                    }
+                    U64(ref oper) => {
+                        write!(f, "    ; -- push u64 {oper} --\n")?;
+                        write!(f, "    push        qword 0x{oper:X}\n")?
+                    }
+                    U8(ref oper) => {
+                        write!(f, "    ; -- push u8 {oper} --\n")?;
+                        write!(f, "    push        byte 0x{oper:X}\n")?
+                    }
+                    NaN(nan) => if nan.is_u64() {
+                        let oper = nan.as_u64();
+                        write!(f, "    ; -- push ni64 {oper} --\n")?;
+                        write!(f, "    push        qword 0x{oper:X}\n")?
+                    } else if nan.is_i64() {
+                        let oper = nan.as_i64();
+                        write!(f, "    ; -- push ni64 {oper} --\n")?;
+                        write!(f, "    push        qword 0x{oper:X}\n")?
+                    } else {
+                        todo!()
+                    }
+                    _ => todo!()
+                }
+            }
+            POP => {
+                write!(f, "    ; -- pop --\n")?;
+                write!(f, "    pop         rbx\n")?;
+            }
+            SWAP => {
+                let oper = inst.val.as_u64();
+                write!(f, "    ; -- swap {oper} --\n")?;
+                write!(f, "    mov rsi,    {oper}\n")?;
+                write!(f, "    mov rdi,    rsp\n")?;
+                write!(f, "    mov rcx,    rsi\n")?;
+                write!(f, "    lea rdx,    [rdi + rcx*8]\n")?;
+                write!(f, "    mov rax,    [rdi]\n")?;
+                write!(f, "    xchg rax,   [rdx]\n")?;
+                write!(f, "    mov [rdi],  rax\n")?;
+                write!(f, "    add rsp,    8\n")?
+            }
+            DUP => {
+                let oper = inst.val.as_u64();
+                write!(f, "    ; -- dup    {oper} --\n")?;
+                write!(f, "    mov rsi,    {oper}\n")?;
+                write!(f, "    mov rdi,    rsp\n")?;
+                write!(f, "    mov rcx,    rsi\n")?;
+                write!(f, "    lea rdx,    [rdi + rcx*8]\n")?;
+                write!(f, "    mov rax,    [rdx]\n")?;
+                write!(f, "    push        rax\n")?
+            }
+            FADD => {
+                write!(f, "    ; -- fadd --\n")?;
+                write!(f, "    movq xmm0,  [rsp]\n")?;
+                write!(f, "    add rsp,    16\n")?;
+                write!(f, "    movq xmm1,  [rsp]\n")?;
+                write!(f, "    addpd xmm0, xmm1\n")?;
+                write!(f, "    movq [rsp], xmm0\n")?
+            }
+            FDIV => {
+                write!(f, "    ; -- fdiv --\n")?;
+                write!(f, "    movq xmm0,  [rsp]\n")?;
+                write!(f, "    add rsp,    16\n")?;
+                write!(f, "    movq xmm1,  [rsp]\n")?;
+                write!(f, "    divpd xmm0, xmm1\n")?;
+                write!(f, "    movq [rsp], xmm0\n")?
+            }
+            FSUB => {
+                write!(f, "    ; -- fsub --\n")?;
+                write!(f, "    movq xmm0,  [rsp]\n")?;
+                write!(f, "    add rsp,    16\n")?;
+                write!(f, "    movq xmm1,  [rsp]\n")?;
+                write!(f, "    subpd xmm0, xmm1\n")?;
+                write!(f, "    movq [rsp], xmm0\n")?
+            }
+            FMUL => {
+                write!(f, "    ; -- fsub --\n")?;
+                write!(f, "    movq xmm0,  [rsp]\n")?;
+                write!(f, "    add rsp,    16\n")?;
+                write!(f, "    movq xmm1,  [rsp]\n")?;
+                write!(f, "    mulpd xmm0, xmm1\n")?;
+                write!(f, "    movq [rsp], xmm0\n")?
+            }
+            IADD => {
+                write!(f, "    ; -- iadd --\n")?;
+                write!(f, "    pop         rax\n")?;
+                write!(f, "    pop         rbx\n")?;
+                write!(f, "    add rax,    rbx\n")?;
+                write!(f, "    push        rax\n")?
+            }
+            ISUB => {
+                write!(f, "    ; -- isub --\n")?;
+                write!(f, "    pop         rax\n")?;
+                write!(f, "    pop         rbx\n")?;
+                write!(f, "    sub rbx,    rax\n")?;
+                write!(f, "    push        rbx\n")?
+            }
+            IMUL => {
+                write!(f, "    ; -- imul --\n")?;
+                write!(f, "    pop         rax\n")?;
+                write!(f, "    pop         rbx\n")?;
+                write!(f, "    mul         rbx")?;
+                write!(f, "    push        rax\n")?
+            }
+            IDIV => {
+                write!(f, "    ; -- idiv --\n")?;
+                write!(f, "    pop         rax\n")?;
+                write!(f, "    pop         rbx\n")?;
+                write!(f, "    xor rdx,    rdx\n")?;
+                write!(f, "    div         rbx")?;
+                write!(f, "    push        rax\n")?
+            }
+            DEC => {
+                write!(f, "    ; -- dec --\n")?;
+                write!(f, "    dec   qword [rsp]\n")?
+            }
+            INC => {
+                write!(f, "    ; -- inc --\n")?;
+                write!(f, "    inc   qword [rsp]\n")?
+            }
+            CMP => {
+                write!(f, "    ; -- cmp --\n")?;
+                write!(f, "    pop         rax\n")?;
+                write!(f, "    pop         rbx\n")?;
+                write!(f, "    cmp rax,    rbx\n")?
+            }
+            DMP => {
+                write!(f, "    ; -- dmp --\n")?;
+                write!(f, "    mov rdi,    [rsp]\n")?;
+                write!(f, "    call        __dmp_64__\n")?
+            }
+            _ => write!(f, "{}\n", String::from(inst))?,
+        }
+
+        Ok(())
+    }
+
+    pub fn generate_x86_64(&self, file_path: &str, program: &'a Program) -> std::io::Result<()> {
+        use std::{fs::File, io::Write};
+
+        let mut f = File::create(file_path)?;
+        let time = Instant::now();
+
+        write!(f, "format ELF64 executable\n")?;
+        write!(f, "segment readable executable\n")?;
+        write!(f, "entry _start\n")?;
+        write!(f, "__dmp_64__:\n")?;
+        write!(f, "    push    rbp\n")?;
+        write!(f, "    mov     rbp, rsp\n")?;
+        write!(f, "    sub     rsp, 64\n")?;
+        write!(f, "    mov     qword [rbp - 8], rdi\n")?;
+        write!(f, "    mov     dword [rbp - 36], 0\n")?;
+        write!(f, "    mov     dword [rbp - 40], 0\n")?;
+        write!(f, "    cmp     qword [rbp - 8], 0\n")?;
+        write!(f, "    jge     .LBB0_2\n")?;
+        write!(f, "    mov     dword [rbp - 40], 1\n")?;
+        write!(f, "    xor     eax, eax\n")?;
+        write!(f, "    sub     rax, qword [rbp - 8]\n")?;
+        write!(f, "    mov     qword [rbp - 8], rax\n")?;
+        write!(f, ".LBB0_2:\n")?;
+        write!(f, "    cmp     qword [rbp - 8], 0\n")?;
+        write!(f, "    jne     .LBB0_4\n")?;
+        write!(f, "    mov     eax, dword [rbp - 36]\n")?;
+        write!(f, "    mov     ecx, eax\n")?;
+        write!(f, "    add     ecx, 1\n")?;
+        write!(f, "    mov     dword [rbp - 36], ecx\n")?;
+        write!(f, "    cdqe\n")?;
+        write!(f, "    mov     byte [rbp + rax - 32], 48\n")?;
+        write!(f, "    jmp     .LBB0_8\n")?;
+        write!(f, ".LBB0_4:\n")?;
+        write!(f, "    jmp     .LBB0_5\n")?;
+        write!(f, ".LBB0_5:\n")?;
+        write!(f, "    cmp     qword [rbp - 8], 0\n")?;
+        write!(f, "    jle     .LBB0_7\n")?;
+        write!(f, "    mov     rax, qword [rbp - 8]\n")?;
+        write!(f, "    mov     ecx, 10\n")?;
+        write!(f, "    cqo\n")?;
+        write!(f, "    idiv    rcx\n")?;
+        write!(f, "    mov     eax, edx\n")?;
+        write!(f, "    mov     dword [rbp - 44], eax\n")?;
+        write!(f, "    mov     eax, dword [rbp - 44]\n")?;
+        write!(f, "    add     eax, 48\n")?;
+        write!(f, "    mov     cl, al\n")?;
+        write!(f, "    mov     eax, dword [rbp - 36]\n")?;
+        write!(f, "    mov     edx, eax\n")?;
+        write!(f, "    add     edx, 1\n")?;
+        write!(f, "    mov     dword [rbp - 36], edx\n")?;
+        write!(f, "    cdqe\n")?;
+        write!(f, "    mov     byte [rbp + rax - 32], cl\n")?;
+        write!(f, "    mov     rax, qword [rbp - 8]\n")?;
+        write!(f, "    mov     ecx, 10\n")?;
+        write!(f, "    cqo\n")?;
+        write!(f, "    idiv    rcx\n")?;
+        write!(f, "    mov     qword [rbp - 8], rax\n")?;
+        write!(f, "    jmp     .LBB0_5\n")?;
+        write!(f, ".LBB0_7:\n")?;
+        write!(f, "    jmp     .LBB0_8\n")?;
+        write!(f, ".LBB0_8:\n")?;
+        write!(f, "    cmp     dword [rbp - 40], 0\n")?;
+        write!(f, "    je      .LBB0_10\n")?;
+        write!(f, "    mov     eax, dword [rbp - 36]\n")?;
+        write!(f, "    mov     ecx, eax\n")?;
+        write!(f, "    add     ecx, 1\n")?;
+        write!(f, "    mov     dword [rbp - 36], ecx\n")?;
+        write!(f, "    cdqe\n")?;
+        write!(f, "    mov     byte [rbp + rax - 32], 45\n")?;
+        write!(f, ".LBB0_10:\n")?;
+        write!(f, "    movsxd  rax, dword [rbp - 36]\n")?;
+        write!(f, "    mov     byte [rbp + rax - 32], 0\n")?;
+        write!(f, "    mov     dword [rbp - 48], 0\n")?;
+        write!(f, "    mov     eax, dword [rbp - 36]\n")?;
+        write!(f, "    sub     eax, 1\n")?;
+        write!(f, "    mov     dword [rbp - 52], eax\n")?;
+        write!(f, ".LBB0_11:\n")?;
+        write!(f, "    mov     eax, dword [rbp - 48]\n")?;
+        write!(f, "    cmp     eax, dword [rbp - 52]\n")?;
+        write!(f, "    jge     .LBB0_13\n")?;
+        write!(f, "    movsxd  rax, dword [rbp - 48]\n")?;
+        write!(f, "    mov     al, byte [rbp + rax - 32]\n")?;
+        write!(f, "    mov     byte [rbp - 53], al\n")?;
+        write!(f, "    movsxd  rax, dword [rbp - 52]\n")?;
+        write!(f, "    mov     cl, byte [rbp + rax - 32]\n")?;
+        write!(f, "    movsxd  rax, dword [rbp - 48]\n")?;
+        write!(f, "    mov     byte [rbp + rax - 32], cl\n")?;
+        write!(f, "    mov     cl, byte [rbp - 53]\n")?;
+        write!(f, "    movsxd  rax, dword [rbp - 52]\n")?;
+        write!(f, "    mov     byte [rbp + rax - 32], cl\n")?;
+        write!(f, "    mov     eax, dword [rbp - 48]\n")?;
+        write!(f, "    add     eax, 1\n")?;
+        write!(f, "    mov     dword [rbp - 48], eax\n")?;
+        write!(f, "    mov     eax, dword [rbp - 52]\n")?;
+        write!(f, "    add     eax, -1\n")?;
+        write!(f, "    mov     dword [rbp - 52], eax\n")?;
+        write!(f, "    jmp     .LBB0_11\n")?;
+        write!(f, ".LBB0_13:\n")?;
+        write!(f, "    mov     eax, dword [rbp - 36]\n")?;
+        write!(f, "    mov     ecx, eax\n")?;
+        write!(f, "    add     ecx, 1\n")?;
+        write!(f, "    mov     dword [rbp - 36], ecx\n")?;
+        write!(f, "    cdqe\n")?;
+        write!(f, "    mov     byte [rbp + rax - 32], 10\n")?;
+        write!(f, "    lea     rsi, [rbp - 32]\n")?;
+        write!(f, "    movsxd  rdx, dword [rbp - 36]\n")?;
+        write!(f, "    mov     edi, 1\n")?;
+        write!(f, "    mov     eax, 1\n")?;
+        write!(f, "    syscall\n")?;
+        write!(f, "    add     rsp, 64\n")?;
+        write!(f, "    pop     rbp\n")?;
+        write!(f, "    ret\n")?;
+
+        for (_, inst) in program.iter() {
+            self.generate_x86_64_instruction(inst, &mut f)?;
+        }
+
+        write!(f, "segment readable writable\n")?;
 
         if DEBUG {
             let elapsed = time.elapsed().as_micros();

@@ -22,7 +22,7 @@ _start:
     push 3.0 ; denominator
     push N   ; counter
 
-loop:
+.loop:
     swap 2 ; swap counter (top of stack) with current acc
 
     ; calculate next denominator
@@ -48,7 +48,7 @@ loop:
 
     push 0
     cmp
-    jne loop
+    jne .loop
 
     ; clean the stack and only have pi left
     pop
