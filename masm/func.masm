@@ -20,4 +20,6 @@ fn3:
     ret
 
 _start:
+    push 35.69
+
     call fn3

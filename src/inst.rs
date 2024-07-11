@@ -43,7 +43,8 @@ pub enum InstType {
     U2F,
 
     BOT,
-    DMP,
+    IDMP,
+    FDMP,
     CALL,
     RET,
     EXTERN,
@@ -94,7 +95,9 @@ impl InstType {
             "jmp"     => Ok(InstType::JMP),
             "label"   => Ok(InstType::LABEL),
             "bot"     => Ok(InstType::BOT),
-            "dmp"     => Ok(InstType::DMP),
+            "idmp"    => Ok(InstType::IDMP),
+            "dmp"     => Ok(InstType::IDMP),
+            "fdmp"    => Ok(InstType::FDMP),
             "call"    => Ok(InstType::CALL),
             "ret"     => Ok(InstType::RET),
             "extern"  => Ok(InstType::EXTERN),
@@ -133,7 +136,8 @@ impl InstType {
             | InstType::JNZ
             | InstType::JMP
             | InstType::LABEL
-            | InstType::DMP
+            | InstType::IDMP
+            | InstType::FDMP
             | InstType::CALL
             | InstType::NATIVE
             | InstType::EXTERN => true,
@@ -178,7 +182,8 @@ impl std::fmt::Display for InstType {
             InstType::U2I     => write!(f, "u2i"),
             InstType::U2F     => write!(f, "u2f"),
             InstType::BOT     => write!(f, "bot"),
-            InstType::DMP     => write!(f, "dmp"),
+            InstType::IDMP    => write!(f, "idmp"),
+            InstType::FDMP    => write!(f, "fdmp"),
             InstType::CALL    => write!(f, "call"),
             InstType::RET     => write!(f, "ret"),
             InstType::EXTERN  => write!(f, "extern"),
@@ -485,7 +490,7 @@ impl Inst {
             InstType::FSUB    => vec![24],
             InstType::FMUL    => vec![25],
             InstType::FDIV    => vec![26],
-            InstType::DMP     => vec![27, *self.val.as_u8()],
+            InstType::IDMP    => vec![27, *self.val.as_u8()],
             InstType::CALL    => extend_to_bytes_string(28, self.val.as_string()),
             InstType::RET     => vec![29],
             InstType::EXTERN  => extend_to_bytes_string(30, self.val.as_string()),
@@ -504,6 +509,7 @@ impl Inst {
             InstType::WRITE32 => vec![43],
             InstType::READ64  => vec![44],
             InstType::WRITE64 => vec![45],
+            InstType::FDMP    => vec![46, *self.val.as_u8()],
             InstType::HALT    => vec![69],
         }
     }
@@ -537,7 +543,7 @@ impl Inst {
             Some(24) => Ok((Inst::FSUB, 1)),
             Some(25) => Ok((Inst::FMUL, 1)),
             Some(26) => Ok((Inst::FDIV, 1)),
-            Some(27) => inst_from_bytes!(u8.bytes, DMP),
+            Some(27) => inst_from_bytes!(u8.bytes, FDMP),
             Some(28) => inst_from_bytes!(bytes, CALL),
             Some(29) => Ok((Inst::RET, 1)),
             Some(30) => inst_from_bytes!(bytes, EXTERN),
@@ -556,6 +562,7 @@ impl Inst {
             Some(43) => Ok((Inst::WRITE32, 1)),
             Some(44) => Ok((Inst::READ64, 1)),
             Some(45) => Ok((Inst::WRITE64, 1)),
+            Some(46) => inst_from_bytes!(u8.bytes, FDMP),
             Some(69) => Ok((Inst::HALT, 1)),
             _        => Err(Trap::UndefinedSymbol(format!("bytes: {bytes:?}"))),
         }
@@ -579,7 +586,8 @@ impl From<&Inst> for String {
                 InstType::JMP    => format!("    jmp         {oper}", oper = inst.val.as_string()),
                 InstType::LABEL  => format!("{oper}:",               oper = inst.val.as_string()),
                 InstType::CALL   => format!("    call        {oper}", oper = inst.val.as_string()),
-                InstType::DMP    => format!("    dmp         {oper}", oper = inst.val.as_u8()),
+                InstType::IDMP   => format!("    idmp        {oper}", oper = inst.val.as_u8()),
+                InstType::FDMP   => format!("    fdmp        {oper}", oper = inst.val.as_u8()),
                 InstType::SWAP   => format!("    swap        {oper}", oper = inst.val.as_u64()),
                 InstType::EXTERN => format!("    extern      {oper}", oper = inst.val.as_string()),
                 InstType::NATIVE => format!("    native      {oper}", oper = inst.val.as_string()),
@@ -630,7 +638,8 @@ impl std::fmt::Display for Inst {
             InstType::U2F     => write!(f, "`U2F`"),
             InstType::BOT     => write!(f, "`BOT`"),
             InstType::RET     => write!(f, "`RET`"),
-            InstType::DMP     => write!(f, "`DMP`, operand: {oper}", oper = self.val.as_u8()),
+            InstType::IDMP    => write!(f, "`IDMP`, operand: {oper}", oper = self.val.as_u8()),
+            InstType::FDMP    => write!(f, "`FDMP`, operand: {oper}", oper = self.val.as_u8()),
             InstType::EXTERN  => write!(f, "`EXTERN`, operand: {oper}", oper = self.val.as_string()),
             InstType::NATIVE  => write!(f, "`NATIVE`, operand: {oper}", oper = self.val.as_string()),
             InstType::READ8   => write!(f, "`READ8`"),

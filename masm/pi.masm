@@ -6,16 +6,8 @@
 ; and subtracting fractions with a numerator of 4 and a denominator of each
 ; subsequent odd number. The more times you do this, the closer you will get to pi.
 
-#N 750000
+#N 1
 #SYS_STDOUT 1
-
-; calculate with current denominator
-;        (4/n)
-; acc + ^
-#CALC_DENOMINATOR secop {
-    fdiv
-    secop
-}
 
 _start:
     push 4.0 ; acc (result of first division 4/1)
@@ -32,7 +24,8 @@ _start:
     fadd
     swap 3
 
-    CALC_DENOMINATOR fsub
+    fdiv
+    fsub
 
     push 4.0
     dup 2
@@ -40,7 +33,8 @@ _start:
     fadd
     swap 3
 
-    CALC_DENOMINATOR fadd
+    fdiv
+    fadd
 
     ; decrement counter
     swap 2
@@ -54,4 +48,4 @@ _start:
     pop
     pop
 
-    dmp SYS_STDOUT ; print the value
+    fdmp SYS_STDOUT ; print the value

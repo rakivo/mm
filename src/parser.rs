@@ -90,7 +90,7 @@ impl<'a> Mm<'a> {
                     };
 
                     let inst = if typ.is_arg_required() {
-                        let arg_ = iter.next().unwrap();
+                        let arg_ = iter.next().expect("Expected argument after instruction");
                         let arg = get_truth(arg_.as_string(), &mm);
 
                         let val = match typ {
@@ -126,7 +126,7 @@ impl<'a> Mm<'a> {
                                 };
                                 InstValue::U64(v)
                             }
-                            InstType::DMP => {
+                            InstType::IDMP | InstType::FDMP => {
                                 let Ok(v) = arg.parse::<u8>() else {
                                     let trap = Trap::InvalidPpType(arg, "u8");
                                     return Err(MTrap(file_path.into(), t.loc, trap))

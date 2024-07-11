@@ -32,12 +32,14 @@ isubbin:
     push 144
     isub
 
-out:
+dump:
     dmp 1
     pop
     dmp 1
     pop
-    dmp 1
+    fdmp 1
+    pop
+    fdmp 1
     pop
     dmp 1
     pop
