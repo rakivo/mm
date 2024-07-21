@@ -182,7 +182,7 @@ impl<'a> Mm<'a> {
 
         if DEBUG {
             let elapsed = time.elapsed().as_micros();
-            println!("Parsing and comptime checks took: {elapsed}ms");
+            println!("Parsing and comptime checks took: {elapsed}μs");
         }
 
         let mm = Mm {

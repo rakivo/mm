@@ -16,6 +16,7 @@ pub enum InstType {
     IDIV,
 
     FADD,
+
     FSUB,
     FMUL,
     FDIV,

@@ -375,14 +375,14 @@ impl<'a> Mm<'a> {
                 Ok(())
             }
 
-            JE
-                | JL
-                | JG
-                | JLE
-                | JNE
-                | JGE
-                | JZ
-                | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
+              JE
+            | JL
+            | JG
+            | JLE
+            | JNE
+            | JGE
+            | JZ
+            | JNZ => self.jump_if_flag(&inst.val.as_string(), Flag::try_from(&inst.typ).unwrap(), program),
 
             JMP => {
                 let label = inst.val.as_string();
@@ -524,11 +524,11 @@ impl<'a> Mm<'a> {
         }
 
         let elapsed = time.elapsed().as_micros();
-        println!("Execution of the program took: {elapsed}ms");
+        println!("Execution of the program took: {elapsed}μs");
 
         #[cfg(feature = "dbg")]
         {
-            times.iter().for_each(|(typ, time)| println!("Max time for instruction type {typ}: {time}ms"));
+            times.iter().for_each(|(typ, time)| println!("Max time for instruction type {typ}: {time}μs"));
         }
 
         Ok(())
@@ -546,7 +546,7 @@ impl<'a> Mm<'a> {
 
         if DEBUG {
             let elapsed = time.elapsed().as_micros();
-            println!("Compiling to binary took: {elapsed}ms");
+            println!("Compiling to binary took: {elapsed}μs");
         }
 
         Ok(())
@@ -581,7 +581,7 @@ impl<'a> Mm<'a> {
 
         if DEBUG {
             let elapsed = time.elapsed().as_micros();
-            println!("Compiling from binary took: {elapsed}ms");
+            println!("Compiling from binary took: {elapsed}μs");
         }
 
         // let libs = lib_paths.iter().map(|l| load_lib(l).unwrap()).collect::<Vec::<_>>();
@@ -787,9 +787,9 @@ impl<'a> Mm<'a> {
             }
             CMP => {
                 write!(f, "    ; -- cmp --\n")?;
-                write!(f, "    pop         rax\n")?;
-                write!(f, "    pop         rbx\n")?;
-                write!(f, "    cmp rbx,    rax\n")?;
+                writeln!(f, "    pop         rbx\n")?;
+                writeln!(f, "    mov rax,    [rsp]")?;
+                writeln!(f, "    cmp rax,    rbx\n")?;
             }
             IDMP => {
                 write!(f, "    ; -- dmp --\n")?;
@@ -1113,6 +1113,7 @@ impl<'a> Mm<'a> {
     (#12) Implement proper errors and do not just `panic!`, even more embed lexer into the VM, to get even better error messages.
     (#13) Allow use of macros inside of macros.
     (#14) Introduce notes to errors.
+    (#15) Make behavior of flags in x86_64 and mm the same.
 
     1. Use lifetimes to get rid of cloning values instead of taking reference.
 */
